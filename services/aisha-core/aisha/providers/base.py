@@ -7,6 +7,10 @@ from aisha.contracts.capabilities import ProviderCapabilities
 from aisha.contracts.turns import TurnContext
 
 
+class AISHAProviderError(RuntimeError):
+    """Normalized failure raised by AISHA compute-provider adapters."""
+
+
 class LLMProvider(Protocol):
     name: str
     model: str

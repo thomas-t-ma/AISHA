@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from aisha.character.loader import PersonaPackage
 from aisha.contracts.events import AISHAEvent
 from aisha.contracts.turns import Message, TurnContext
+from aisha.providers.base import AISHAProviderError
 from aisha.storage.database import AISHAStore
 
 
@@ -52,7 +53,7 @@ class AISHAOrchestrator:
                     type="aisha.assistant.text_delta",
                     payload={"text": delta},
                 )
-        except Exception as exc:
+        except AISHAProviderError as exc:
             yield AISHAEvent(
                 session_id=session_id,
                 turn_id=context.turn_id,

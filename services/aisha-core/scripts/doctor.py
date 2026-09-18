@@ -17,7 +17,7 @@ def command_version(command: list[str]) -> str | None:
         result = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
         text = (result.stdout or result.stderr).strip()
         return text.splitlines()[0] if text else "installed"
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return "installed (version unavailable)"
 
 
@@ -38,8 +38,9 @@ async def main() -> None:
                 response.raise_for_status()
                 models = [m.get("name") for m in response.json().get("models", [])]
                 print(f"Runtime:  reachable ({len(models)} local model(s))")
-                print(f"Model:    {profile.llm.model} {'✓' if any(str(m).startswith(profile.llm.model) for m in models) else '(not pulled yet)'}")
-        except Exception as exc:
+                installed = any(str(model).startswith(profile.llm.model) for model in models)
+                print(f"Model:    {profile.llm.model} {'✓' if installed else '(not pulled yet)'}")
+        except (httpx.HTTPError, ValueError) as exc:
             print(f"Runtime:  unavailable ({exc})")
 
 

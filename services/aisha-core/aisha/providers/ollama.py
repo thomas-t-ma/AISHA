@@ -7,6 +7,7 @@ import httpx
 
 from aisha.contracts.capabilities import ProviderCapabilities
 from aisha.contracts.turns import TurnContext
+from aisha.providers.base import AISHAProviderError
 
 
 class OllamaLLMProvider:
@@ -32,17 +33,24 @@ class OllamaLLMProvider:
             "stream": True,
         }
         timeout = httpx.Timeout(connect=10.0, read=None, write=30.0, pool=30.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response:
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client, client.stream(
+                "POST",
+                f"{self.base_url}/api/chat",
+                json=payload,
+            ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line:
                         continue
                     data = json.loads(line)
                     if data.get("error"):
-                        raise RuntimeError(data["error"])
+                        raise AISHAProviderError(str(data["error"]))
                     content = data.get("message", {}).get("content", "")
                     if content:
                         yield content
                     if data.get("done"):
                         break
+        except (httpx.HTTPError, json.JSONDecodeError) as exc:
+            raise AISHAProviderError(f"Ollama request failed: {exc}") from exc

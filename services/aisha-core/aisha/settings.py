@@ -8,7 +8,6 @@ import yaml
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 CORE_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = CORE_DIR.parents[1]
 

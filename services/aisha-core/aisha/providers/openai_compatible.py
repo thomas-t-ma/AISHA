@@ -7,6 +7,7 @@ import httpx
 
 from aisha.contracts.capabilities import ProviderCapabilities
 from aisha.contracts.turns import TurnContext
+from aisha.providers.base import AISHAProviderError
 
 
 class OpenAICompatibleLLMProvider:
@@ -40,8 +41,9 @@ class OpenAICompatibleLLMProvider:
 
         payload = {"model": self.model, "messages": messages, "stream": True}
         timeout = httpx.Timeout(connect=15.0, read=None, write=30.0, pool=30.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream(
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client, client.stream(
                 "POST",
                 f"{self.base_url}/chat/completions",
                 headers=headers,
@@ -58,3 +60,5 @@ class OpenAICompatibleLLMProvider:
                     delta = event.get("choices", [{}])[0].get("delta", {}).get("content")
                     if delta:
                         yield delta
+        except (httpx.HTTPError, json.JSONDecodeError) as exc:
+            raise AISHAProviderError(f"OpenAI-compatible request failed: {exc}") from exc

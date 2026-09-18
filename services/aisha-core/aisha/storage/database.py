@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from aisha.contracts.turns import Message
 
-
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,

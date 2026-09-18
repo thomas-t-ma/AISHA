@@ -6,7 +6,6 @@ import json
 import httpx
 import websockets
 
-
 BASE_HTTP = "http://127.0.0.1:8000"
 BASE_WS = "ws://127.0.0.1:8000"
 
