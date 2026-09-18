@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
+from aisha.contracts.events import AISHAEvent
 from aisha.contracts.turns import Message
-
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -24,16 +25,42 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_created
 ON messages(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS model_runs (
+    run_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    status TEXT NOT NULL,
+    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    first_token_ms REAL,
+    total_ms REAL,
+    output_chars INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    backend_metrics_json TEXT,
+    FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_model_runs_session_started
+ON model_runs(session_id, started_at);
+
+CREATE TABLE IF NOT EXISTS events (
+    event_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    turn_id TEXT,
+    timestamp TEXT NOT NULL,
+    source TEXT NOT NULL,
+    type TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    FOREIGN KEY(session_id) REFERENCES sessions(session_id)
+);
+CREATE INDEX IF NOT EXISTS idx_events_session_timestamp
+ON events(session_id, timestamp);
 """
 
 
 class AISHAStore:
-    """Small SQLite store using only Python's standard library.
-
-    SQLite calls are moved to worker threads so AISHA's async event loop is not blocked.
-    This keeps the first persistence layer portable across macOS/Windows/Linux without
-    a platform-specific database dependency.
-    """
+    """Small SQLite store using only Python's standard library."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -50,6 +77,11 @@ class AISHAStore:
         def work() -> None:
             with self._connect() as db:
                 db.executescript(SCHEMA)
+                columns = {
+                    row["name"] for row in db.execute("PRAGMA table_info(model_runs)").fetchall()
+                }
+                if "backend_metrics_json" not in columns:
+                    db.execute("ALTER TABLE model_runs ADD COLUMN backend_metrics_json TEXT")
 
         await asyncio.to_thread(work)
 
@@ -111,3 +143,143 @@ class AISHAStore:
             )
             for row in rows
         ]
+
+    async def start_model_run(
+        self,
+        session_id: str,
+        turn_id: str,
+        provider: str,
+        model: str,
+    ) -> str:
+        run_id = f"run_{uuid4().hex}"
+
+        def work() -> None:
+            with self._connect() as db:
+                db.execute(
+                    "INSERT INTO model_runs(run_id, session_id, turn_id, provider, model, status) "
+                    "VALUES (?, ?, ?, ?, ?, 'running')",
+                    (run_id, session_id, turn_id, provider, model),
+                )
+
+        await asyncio.to_thread(work)
+        return run_id
+
+    async def finish_model_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        first_token_ms: float | None,
+        total_ms: float,
+        output_chars: int,
+        error: str | None = None,
+        backend_metrics: dict | None = None,
+    ) -> None:
+        metrics_json = (
+            json.dumps(backend_metrics, separators=(",", ":")) if backend_metrics else None
+        )
+
+        def work() -> None:
+            with self._connect() as db:
+                db.execute(
+                    """
+                    UPDATE model_runs
+                    SET status = ?, first_token_ms = ?, total_ms = ?, output_chars = ?, error = ?,
+                        backend_metrics_json = ?
+                    WHERE run_id = ?
+                    """,
+                    (
+                        status,
+                        first_token_ms,
+                        total_ms,
+                        output_chars,
+                        error,
+                        metrics_json,
+                        run_id,
+                    ),
+                )
+
+        await asyncio.to_thread(work)
+
+    async def add_event(self, event: AISHAEvent) -> None:
+        def work() -> None:
+            with self._connect() as db:
+                db.execute(
+                    """
+                    INSERT INTO events(
+                        event_id, session_id, turn_id, timestamp, source, type, payload_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event.event_id,
+                        event.session_id,
+                        event.turn_id,
+                        event.timestamp.isoformat(),
+                        event.source,
+                        event.type,
+                        json.dumps(event.payload, separators=(",", ":")),
+                    ),
+                )
+
+        await asyncio.to_thread(work)
+
+    async def session_events(self, session_id: str, limit: int = 200) -> list[dict]:
+        safe_limit = max(1, min(limit, 2000))
+
+        def work() -> list[sqlite3.Row]:
+            with self._connect() as db:
+                return list(
+                    db.execute(
+                        """
+                        SELECT event_id, session_id, turn_id, timestamp, source, type, payload_json
+                        FROM events
+                        WHERE session_id = ?
+                        ORDER BY timestamp ASC
+                        LIMIT ?
+                        """,
+                        (session_id, safe_limit),
+                    ).fetchall()
+                )
+
+        rows = await asyncio.to_thread(work)
+        return [
+            {
+                "event_id": row["event_id"],
+                "session_id": row["session_id"],
+                "turn_id": row["turn_id"],
+                "timestamp": row["timestamp"],
+                "source": row["source"],
+                "type": row["type"],
+                "payload": json.loads(row["payload_json"]),
+            }
+            for row in rows
+        ]
+
+    async def session_model_runs(self, session_id: str, limit: int = 100) -> list[dict]:
+        safe_limit = max(1, min(limit, 1000))
+
+        def work() -> list[sqlite3.Row]:
+            with self._connect() as db:
+                return list(
+                    db.execute(
+                        """
+                        SELECT run_id, session_id, turn_id, provider, model, status, started_at,
+                               first_token_ms, total_ms, output_chars, error, backend_metrics_json
+                        FROM model_runs
+                        WHERE session_id = ?
+                        ORDER BY started_at ASC
+                        LIMIT ?
+                        """,
+                        (session_id, safe_limit),
+                    ).fetchall()
+                )
+
+        rows = await asyncio.to_thread(work)
+        runs: list[dict] = []
+        for row in rows:
+            run = dict(row)
+            raw_metrics = run.pop("backend_metrics_json")
+            run["backend_metrics"] = json.loads(raw_metrics) if raw_metrics else {}
+            runs.append(run)
+        return runs

@@ -3,9 +3,13 @@ compute:
   class: apple-silicon
 llm:
   provider: ollama
-  model: qwen3:4b
+  model: qwen3.5:9b-mlx
   base_url: http://127.0.0.1:11434
   api_key_env: null
+  think: false
+  keep_alive: 30m
+  options:
+    num_ctx: 32768
 stt:
   provider: disabled
   planned_provider: mlx-whisper
@@ -15,5 +19,5 @@ tts:
 vision:
   provider: disabled
 notes: >-
-  Development profile for Apple Silicon. Keep AISHA Core portable; Ollama/MLX/model
-  weights are installed outside the repository. Voice backends are added as adapters.
+  Generic Apple Silicon development profile. Use the M2 Max profile on the
+  96 GB workstation.

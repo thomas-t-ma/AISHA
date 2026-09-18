@@ -2,70 +2,81 @@
 
 Portable, local-first foundation for a persistent realtime AI character.
 
-This repository is intentionally split between **AISHA logic** (version-controlled) and
-**compute runtimes** (machine-local). The same core is meant to run on an Apple Silicon Mac,
+AISHA logic lives in Git; model runtimes, weights, private conversation data, recordings,
+and machine-specific state do not. The same core is intended to run on Apple Silicon,
 an RTX 2070 desktop, or a future high-VRAM workstation.
 
 ## Architecture rule
 
-AISHA Core does not import CUDA, Metal, MLX, or Ollama internals. It talks to typed provider
-interfaces. Hardware changes should be profile/configuration changes, not rewrites.
+AISHA Core does not import CUDA, Metal, MLX, or Ollama internals. It talks to typed
+provider interfaces. Hardware changes are profile/configuration changes, not cognition
+rewrites.
 
 ## Current vertical slice
 
 - FastAPI AISHA Core
-- typed events and turn IDs
+- typed session / turn / event contracts
 - SQLite conversation persistence
-- versioned AISHA persona
-- mock LLM provider
+- versioned persona package
+- mock LLM provider for tests/CI
 - local Ollama provider
 - generic OpenAI-compatible provider for future local/hosted servers
-- hardware/runtime profiles
+- runtime profiles
+- streaming WebSocket conversation
 - CLI chat client
 - doctor script
-- GitHub Actions tests using the mock backend
 
-## Start on an Apple Silicon Mac
+## Mac development machine
 
-### 1. Clone the repository
+Current primary development hardware:
 
-```bash
-git clone <YOUR_AISHA_REPO_URL>
-cd AISHA
-```
+- Apple M2 Max
+- 96 GB unified memory
+- Ollama
+- profile: `mac-m2max-96gb`
+- default local model: `qwen3.5:35b-mlx`
 
-### 2. Install Python 3.12
+The model runtime is external to Git.
 
-If needed:
-
-```bash
-brew install python@3.12
-```
-
-### 3. Bootstrap AISHA Core
+### Bootstrap
 
 ```bash
 ./infrastructure/scripts/bootstrap_mac.sh
 ```
 
-### 4. First run without any LLM
-
-Edit `services/aisha-core/.env`:
-
-```dotenv
-AISHA_PROFILE=mock
-```
-
-Then:
+The safe default is the mock backend. Test it first:
 
 ```bash
 cd services/aisha-core
 source .venv/bin/activate
 pytest -q
+```
+
+Then pull the Mac model:
+
+```bash
+ollama pull qwen3.5:35b-mlx
+```
+
+Edit `services/aisha-core/.env`:
+
+```dotenv
+AISHA_PROFILE=mac-m2max-96gb
+```
+
+Verify the machine/runtime:
+
+```bash
+python scripts/doctor.py
+```
+
+Start AISHA Core:
+
+```bash
 uvicorn aisha.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-In another terminal:
+In a second terminal:
 
 ```bash
 cd services/aisha-core
@@ -73,46 +84,36 @@ source .venv/bin/activate
 python scripts/chat.py
 ```
 
-### 5. Add the free local LLM
+## Moving between machines
 
-Install Ollama separately, then:
+GitHub is the source of truth for AISHA code.
 
-```bash
-ollama pull qwen3:4b
-```
-
-Change `.env`:
-
-```dotenv
-AISHA_PROFILE=mac-apple-silicon
-```
-
-Run:
+At the start of a session:
 
 ```bash
-python scripts/doctor.py
-uvicorn aisha.main:app --reload --host 127.0.0.1 --port 8000
+git pull --rebase
 ```
 
-The same `scripts/chat.py` client now talks to the local model.
+At the end of a stable change:
 
-## Move to the RTX 2070 later
-
-On the desktop, clone/pull the same repo and change only:
-
-```dotenv
-AISHA_PROFILE=nvidia-2070
+```bash
+git add .
+git commit -m "Describe the AISHA change"
+git push
 ```
 
-Install the machine-local NVIDIA/Ollama runtime and pull the model. The AISHA code and
-stored contracts remain the same.
+The RTX 2070 machine uses the same repository with `AISHA_PROFILE=nvidia-2070`.
+A future high-VRAM workstation can use `nvidia-high` or another checked-in profile.
 
-## Scale beyond the RTX 2070
+## What never belongs in Git
 
-Use `nvidia-high.yaml` as the pattern for a stronger local inference server. AISHA can point
-at localhost or a LAN compute node. Large model servers, weights, caches and datasets do not
-belong in Git.
+- `.env`
+- virtual environments
+- Python caches
+- SQLite runtime databases
+- Ollama/model weights
+- raw audio/video
+- private conversation/memory datasets
+- large checkpoints or Gaussian captures
 
-See:
-- `docs/COMPUTE_BACKENDS.md`
-- `docs/MAC_FIRST_PLAN.md`
+See `docs/COMPUTE_BACKENDS.md` and `docs/MAC_FIRST_PLAN.md`.

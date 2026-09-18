@@ -18,5 +18,10 @@ async def test_mock_vertical_slice(tmp_path):
     events = [event async for event in orchestrator.stream_user_turn(session_id, "hello")]
     assert events[0].type == "aisha.turn.started"
     assert events[-1].type == "aisha.turn.finished"
+
     messages = await store.recent_messages(session_id)
-    assert [m.role for m in messages] == ["user", "assistant"]
+    assert [message.role for message in messages] == ["user", "assistant"]
+
+    runs = await store.session_model_runs(session_id)
+    assert len(runs) == 1
+    assert runs[0]["status"] == "completed"

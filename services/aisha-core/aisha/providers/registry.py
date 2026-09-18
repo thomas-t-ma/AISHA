@@ -13,7 +13,13 @@ def build_llm_provider(settings: Settings, profile: RuntimeProfile):
     if cfg.provider == "ollama":
         if not cfg.base_url:
             raise ValueError("Ollama provider requires llm.base_url")
-        return OllamaLLMProvider(model=cfg.model, base_url=cfg.base_url)
+        return OllamaLLMProvider(
+            model=cfg.model,
+            base_url=cfg.base_url,
+            think=cfg.think,
+            keep_alive=cfg.keep_alive,
+            options=cfg.options,
+        )
     if cfg.provider == "openai-compatible":
         if not cfg.base_url:
             raise ValueError("OpenAI-compatible provider requires llm.base_url")
