@@ -6,6 +6,10 @@ llm:
   model: qwen3.5:9b-mlx
   base_url: http://127.0.0.1:11434
   api_key_env: null
+  think: false
+  keep_alive: 30m
+  options:
+    num_ctx: 32768
 stt:
   provider: disabled
   planned_provider: mlx-whisper
@@ -15,5 +19,5 @@ tts:
 vision:
   provider: disabled
 notes: >-
-  Generic Apple Silicon development profile. The M2 Max / 96 GB workstation
-  should use mac-m2max-96gb instead.
+  Generic Apple Silicon development profile. Use the M2 Max profile on the
+  96 GB workstation.

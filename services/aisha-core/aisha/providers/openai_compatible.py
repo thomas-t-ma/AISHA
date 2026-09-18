@@ -7,7 +7,7 @@ import httpx
 
 from aisha.contracts.capabilities import ProviderCapabilities
 from aisha.contracts.turns import TurnContext
-from aisha.providers.base import AISHAProviderError
+from aisha.providers.base import AISHAProviderError, LLMStreamChunk
 
 
 class OpenAICompatibleLLMProvider:
@@ -26,7 +26,7 @@ class OpenAICompatibleLLMProvider:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
 
-    async def stream_turn(self, context: TurnContext) -> AsyncIterator[str]:
+    async def stream_turn(self, context: TurnContext) -> AsyncIterator[LLMStreamChunk]:
         messages = [{"role": "system", "content": context.system_prompt}]
         messages.extend(
             {"role": message.role, "content": message.text}
@@ -55,10 +55,11 @@ class OpenAICompatibleLLMProvider:
                         continue
                     data = line[5:].strip()
                     if data == "[DONE]":
+                        yield LLMStreamChunk(final=True)
                         break
                     event = json.loads(data)
                     delta = event.get("choices", [{}])[0].get("delta", {}).get("content")
                     if delta:
-                        yield delta
+                        yield LLMStreamChunk(text=delta)
         except (httpx.HTTPError, json.JSONDecodeError) as exc:
             raise AISHAProviderError(f"OpenAI-compatible request failed: {exc}") from exc

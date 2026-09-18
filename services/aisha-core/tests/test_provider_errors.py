@@ -8,7 +8,7 @@ from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.contracts.capabilities import ProviderCapabilities
 from aisha.contracts.turns import TurnContext
-from aisha.providers.base import AISHAProviderError
+from aisha.providers.base import AISHAProviderError, LLMStreamChunk
 from aisha.settings import Settings
 from aisha.storage.database import AISHAStore
 
@@ -18,9 +18,10 @@ class FailingProvider:
     model = "test-model"
     capabilities = ProviderCapabilities(streaming_text=True)
 
-    async def stream_turn(self, context: TurnContext) -> AsyncIterator[str]:
+    async def stream_turn(self, context: TurnContext) -> AsyncIterator[LLMStreamChunk]:
+        del context
         if False:
-            yield ""
+            yield LLMStreamChunk()
         raise AISHAProviderError("expected provider failure")
 
 

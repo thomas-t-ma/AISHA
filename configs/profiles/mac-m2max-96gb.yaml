@@ -8,6 +8,10 @@ llm:
   model: qwen3.5:35b-mlx
   base_url: http://127.0.0.1:11434
   api_key_env: null
+  think: false
+  keep_alive: 30m
+  options:
+    num_ctx: 32768
 stt:
   provider: disabled
   planned_provider: mlx-whisper
@@ -17,6 +21,6 @@ tts:
 vision:
   provider: disabled
 notes: >-
-  Primary AISHA development profile for the M2 Max / 96 GB Mac. Keep model
-  weights and Ollama outside Git. Start with 32K effective application context
-  even when the model supports more; AISHA memory will own long-term recall.
+  Primary AISHA development profile for the M2 Max / 96 GB Mac. Conversational
+  turns disable model thinking for latency. Future planning/reasoning tasks may
+  opt into a separate thinking profile or model role.

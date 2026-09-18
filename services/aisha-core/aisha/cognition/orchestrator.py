@@ -88,6 +88,7 @@ class AISHAOrchestrator:
         started = perf_counter()
         first_token_ms: float | None = None
         chunks: list[str] = []
+        backend_metrics: dict = {}
 
         started_event = await self._persisted_event(
             session_id=session_id,
@@ -103,7 +104,7 @@ class AISHAOrchestrator:
         yield started_event
 
         try:
-            async for delta in self.llm_provider.stream_turn(context):
+            async for chunk in self.llm_provider.stream_turn(context):
                 if cancellation.is_set():
                     total_ms = (perf_counter() - started) * 1000
                     await self.store.finish_model_run(
@@ -111,7 +112,8 @@ class AISHAOrchestrator:
                         status="cancelled",
                         first_token_ms=first_token_ms,
                         total_ms=total_ms,
-                        output_chars=sum(len(chunk) for chunk in chunks),
+                        output_chars=sum(len(text_chunk) for text_chunk in chunks),
+                        backend_metrics=backend_metrics,
                     )
                     cancelled_event = await self._persisted_event(
                         session_id=session_id,
@@ -120,22 +122,28 @@ class AISHAOrchestrator:
                         payload={
                             "run_id": run_id,
                             "status": "cancelled",
-                            "output_chars": sum(len(chunk) for chunk in chunks),
+                            "output_chars": sum(len(text_chunk) for text_chunk in chunks),
                             "total_ms": round(total_ms, 3),
                         },
                     )
                     yield cancelled_event
                     return
 
+                if chunk.metrics:
+                    backend_metrics.update(chunk.metrics)
+
+                if not chunk.text:
+                    continue
+
                 if first_token_ms is None:
                     first_token_ms = (perf_counter() - started) * 1000
 
-                chunks.append(delta)
+                chunks.append(chunk.text)
                 delta_event = await self._persisted_event(
                     session_id=session_id,
                     turn_id=context.turn_id,
                     type_="aisha.assistant.text_delta",
-                    payload={"run_id": run_id, "text": delta},
+                    payload={"run_id": run_id, "text": chunk.text},
                 )
                 yield delta_event
 
@@ -146,7 +154,8 @@ class AISHAOrchestrator:
                     status="cancelled",
                     first_token_ms=first_token_ms,
                     total_ms=total_ms,
-                    output_chars=sum(len(chunk) for chunk in chunks),
+                    output_chars=sum(len(text_chunk) for text_chunk in chunks),
+                    backend_metrics=backend_metrics,
                 )
                 cancelled_event = await self._persisted_event(
                     session_id=session_id,
@@ -155,7 +164,7 @@ class AISHAOrchestrator:
                     payload={
                         "run_id": run_id,
                         "status": "cancelled",
-                        "output_chars": sum(len(chunk) for chunk in chunks),
+                        "output_chars": sum(len(text_chunk) for text_chunk in chunks),
                         "total_ms": round(total_ms, 3),
                     },
                 )
@@ -168,8 +177,9 @@ class AISHAOrchestrator:
                 status="failed",
                 first_token_ms=first_token_ms,
                 total_ms=total_ms,
-                output_chars=sum(len(chunk) for chunk in chunks),
+                output_chars=sum(len(text_chunk) for text_chunk in chunks),
                 error=str(exc),
+                backend_metrics=backend_metrics,
             )
             failed_event = await self._persisted_event(
                 session_id=session_id,
@@ -193,6 +203,7 @@ class AISHAOrchestrator:
             first_token_ms=first_token_ms,
             total_ms=total_ms,
             output_chars=len(final_text),
+            backend_metrics=backend_metrics,
         )
         finished_event = await self._persisted_event(
             session_id=session_id,
@@ -205,6 +216,7 @@ class AISHAOrchestrator:
                 "first_token_ms": None if first_token_ms is None else round(first_token_ms, 3),
                 "total_ms": round(total_ms, 3),
                 "output_chars": len(final_text),
+                "backend_metrics": backend_metrics,
             },
         )
         yield finished_event

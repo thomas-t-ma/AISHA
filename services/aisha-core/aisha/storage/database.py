@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS model_runs (
     total_ms REAL,
     output_chars INTEGER NOT NULL DEFAULT 0,
     error TEXT,
+    backend_metrics_json TEXT,
     FOREIGN KEY(session_id) REFERENCES sessions(session_id)
 );
 CREATE INDEX IF NOT EXISTS idx_model_runs_session_started
@@ -59,12 +60,7 @@ ON events(session_id, timestamp);
 
 
 class AISHAStore:
-    """Small SQLite store using only Python's standard library.
-
-    SQLite calls are moved to worker threads so AISHA's async event loop is not blocked.
-    This keeps the first persistence layer portable across macOS/Windows/Linux without
-    a platform-specific database dependency.
-    """
+    """Small SQLite store using only Python's standard library."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -81,6 +77,11 @@ class AISHAStore:
         def work() -> None:
             with self._connect() as db:
                 db.executescript(SCHEMA)
+                columns = {
+                    row["name"] for row in db.execute("PRAGMA table_info(model_runs)").fetchall()
+                }
+                if "backend_metrics_json" not in columns:
+                    db.execute("ALTER TABLE model_runs ADD COLUMN backend_metrics_json TEXT")
 
         await asyncio.to_thread(work)
 
@@ -172,16 +173,30 @@ class AISHAStore:
         total_ms: float,
         output_chars: int,
         error: str | None = None,
+        backend_metrics: dict | None = None,
     ) -> None:
+        metrics_json = (
+            json.dumps(backend_metrics, separators=(",", ":")) if backend_metrics else None
+        )
+
         def work() -> None:
             with self._connect() as db:
                 db.execute(
                     """
                     UPDATE model_runs
-                    SET status = ?, first_token_ms = ?, total_ms = ?, output_chars = ?, error = ?
+                    SET status = ?, first_token_ms = ?, total_ms = ?, output_chars = ?, error = ?,
+                        backend_metrics_json = ?
                     WHERE run_id = ?
                     """,
-                    (status, first_token_ms, total_ms, output_chars, error, run_id),
+                    (
+                        status,
+                        first_token_ms,
+                        total_ms,
+                        output_chars,
+                        error,
+                        metrics_json,
+                        run_id,
+                    ),
                 )
 
         await asyncio.to_thread(work)
@@ -250,7 +265,7 @@ class AISHAStore:
                     db.execute(
                         """
                         SELECT run_id, session_id, turn_id, provider, model, status, started_at,
-                               first_token_ms, total_ms, output_chars, error
+                               first_token_ms, total_ms, output_chars, error, backend_metrics_json
                         FROM model_runs
                         WHERE session_id = ?
                         ORDER BY started_at ASC
@@ -261,4 +276,10 @@ class AISHAStore:
                 )
 
         rows = await asyncio.to_thread(work)
-        return [dict(row) for row in rows]
+        runs: list[dict] = []
+        for row in rows:
+            run = dict(row)
+            raw_metrics = run.pop("backend_metrics_json")
+            run["backend_metrics"] = json.loads(raw_metrics) if raw_metrics else {}
+            runs.append(run)
+        return runs
