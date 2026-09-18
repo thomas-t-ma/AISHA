@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from time import perf_counter
 from typing import Any
 
 import httpx
@@ -46,6 +47,7 @@ class OllamaLLMProvider:
         if self.options:
             payload["options"] = self.options
 
+        started = perf_counter()
         try:
             async with httpx.AsyncClient(timeout=None) as client:
                 response = await client.post(f"{self.base_url}/api/chat", json=payload)
@@ -56,6 +58,7 @@ class OllamaLLMProvider:
 
         return {
             "preloaded": True,
+            "wall_clock_ms": round((perf_counter() - started) * 1000, 3),
             "load_ms": _duration_ms(data.get("load_duration")),
             "ollama_total_ms": _duration_ms(data.get("total_duration")),
         }
