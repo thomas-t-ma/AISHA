@@ -13,3 +13,11 @@ def test_profiles_load():
         assert profile.name == name
         assert profile.llm.provider
         assert profile.llm.model
+
+
+def test_m2max_profile_preloads_conversation_model():
+    profile = Settings(aisha_profile="mac-m2max-96gb").load_profile()
+
+    assert profile.llm.preload is True
+    assert profile.llm.think is False
+    assert profile.llm.keep_alive == "30m"

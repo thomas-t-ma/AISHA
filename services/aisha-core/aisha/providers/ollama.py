@@ -36,6 +36,30 @@ class OllamaLLMProvider:
         self.keep_alive = keep_alive
         self.options = options or {}
 
+    async def warmup(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "stream": False,
+        }
+        if self.keep_alive is not None:
+            payload["keep_alive"] = self.keep_alive
+        if self.options:
+            payload["options"] = self.options
+
+        try:
+            async with httpx.AsyncClient(timeout=None) as client:
+                response = await client.post(f"{self.base_url}/api/chat", json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise AISHAProviderError(f"Ollama warmup failed: {exc}") from exc
+
+        return {
+            "preloaded": True,
+            "load_ms": _duration_ms(data.get("load_duration")),
+            "ollama_total_ms": _duration_ms(data.get("total_duration")),
+        }
+
     async def stream_turn(self, context: TurnContext) -> AsyncIterator[LLMStreamChunk]:
         messages = [{"role": "system", "content": context.system_prompt}]
         messages.extend(

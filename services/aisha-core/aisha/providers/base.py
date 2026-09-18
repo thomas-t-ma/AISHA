@@ -24,4 +24,6 @@ class LLMProvider(Protocol):
     model: str
     capabilities: ProviderCapabilities
 
+    async def warmup(self) -> dict[str, Any]: ...
+
     async def stream_turn(self, context: TurnContext) -> AsyncIterator[LLMStreamChunk]: ...

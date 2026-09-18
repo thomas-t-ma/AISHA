@@ -19,6 +19,7 @@ class LLMProfile(BaseModel):
     api_key_env: str | None = None
     think: bool | Literal["low", "medium", "high", "max"] | None = None
     keep_alive: str | int | None = None
+    preload: bool = False
     options: dict[str, Any] = Field(default_factory=dict)
 
 

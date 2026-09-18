@@ -24,6 +24,7 @@ async def health(request: Request):
         "model": state["provider"].model,
         "persona_version": state["persona"].version,
         "data_dir": str(state["settings"].data_dir),
+        "warmup": state.get("warmup_metrics", {}),
     }
 
 

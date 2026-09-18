@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 
@@ -11,12 +12,7 @@ from aisha.providers.base import AISHAProviderError, LLMStreamChunk
 
 
 class OpenAICompatibleLLMProvider:
-    """Generic /v1/chat/completions streaming adapter.
-
-    Intended for hosted APIs and local servers such as vLLM/SGLang when configured
-    to expose an OpenAI-compatible endpoint. Provider-specific features should be
-    added through capabilities/adapters rather than leaking into AISHA Core.
-    """
+    """Generic /v1/chat/completions streaming adapter."""
 
     name = "openai-compatible"
     capabilities = ProviderCapabilities(streaming_text=True, remote=True)
@@ -25,6 +21,10 @@ class OpenAICompatibleLLMProvider:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+
+    async def warmup(self) -> dict[str, Any]:
+        # Do not spend remote tokens merely to warm a hosted provider.
+        return {"preloaded": False}
 
     async def stream_turn(self, context: TurnContext) -> AsyncIterator[LLMStreamChunk]:
         messages = [{"role": "system", "content": context.system_prompt}]

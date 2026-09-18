@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -9,9 +10,12 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from aisha.api.routes import router
 from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
+from aisha.providers.base import AISHAProviderError
 from aisha.providers.registry import build_llm_provider
 from aisha.settings import Settings
 from aisha.storage.database import AISHAStore
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -22,6 +26,16 @@ async def lifespan(app: FastAPI):
     store = AISHAStore(settings.data_dir / "database" / "aisha.sqlite3")
     await store.initialize()
     provider = build_llm_provider(settings, profile)
+
+    warmup_metrics: dict = {}
+    if profile.llm.preload:
+        try:
+            warmup_metrics = await provider.warmup()
+            logger.info("AISHA model preloaded: %s", warmup_metrics)
+        except AISHAProviderError as exc:
+            logger.warning("AISHA model preload failed; continuing cold: %s", exc)
+            warmup_metrics = {"preloaded": False, "error": str(exc)}
+
     orchestrator = AISHAOrchestrator(store, persona, provider)
 
     app.state.aisha = {
@@ -31,6 +45,7 @@ async def lifespan(app: FastAPI):
         "store": store,
         "provider": provider,
         "orchestrator": orchestrator,
+        "warmup_metrics": warmup_metrics,
     }
     yield
 

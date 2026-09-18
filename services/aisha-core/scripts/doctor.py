@@ -31,6 +31,7 @@ async def main() -> None:
     print(f"Data dir:   {settings.data_dir}")
     print(f"Ollama:     {command_version(['ollama', '--version']) or 'not found'}")
     print(f"Think:      {profile.llm.think}")
+    print(f"Preload:    {profile.llm.preload}")
     print(f"Keep alive: {profile.llm.keep_alive}")
     if profile.llm.options:
         print(f"LLM options:{profile.llm.options}")

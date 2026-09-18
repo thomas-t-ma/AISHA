@@ -9,6 +9,7 @@ llm:
   base_url: http://127.0.0.1:11434
   api_key_env: null
   think: false
+  preload: true
   keep_alive: 30m
   options:
     num_ctx: 32768
@@ -22,5 +23,5 @@ vision:
   provider: disabled
 notes: >-
   Primary AISHA development profile for the M2 Max / 96 GB Mac. Conversational
-  turns disable model thinking for latency. Future planning/reasoning tasks may
-  opt into a separate thinking profile or model role.
+  turns disable model thinking for latency and preload the model when AISHA Core
+  starts. Future planning/reasoning tasks may opt into a separate thinking role.
