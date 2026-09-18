@@ -1,0 +1,19 @@
+name: mac-apple-silicon
+compute:
+  class: apple-silicon
+llm:
+  provider: ollama
+  model: qwen3:4b
+  base_url: http://127.0.0.1:11434
+  api_key_env: null
+stt:
+  provider: disabled
+  planned_provider: mlx-whisper
+tts:
+  provider: disabled
+  planned_provider: kokoro-local
+vision:
+  provider: disabled
+notes: >-
+  Development profile for Apple Silicon. Keep AISHA Core portable; Ollama/MLX/model
+  weights are installed outside the repository. Voice backends are added as adapters.

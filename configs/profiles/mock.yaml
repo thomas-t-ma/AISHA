@@ -1,0 +1,15 @@
+name: mock
+compute:
+  class: mock
+llm:
+  provider: mock
+  model: mock-aisha
+  base_url: null
+  api_key_env: null
+stt:
+  provider: disabled
+tts:
+  provider: disabled
+vision:
+  provider: disabled
+notes: "CI and architecture tests. Requires no external models."

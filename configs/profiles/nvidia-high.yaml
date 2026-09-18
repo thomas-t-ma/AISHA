@@ -1,0 +1,19 @@
+name: nvidia-high
+compute:
+  class: nvidia-high-vram
+llm:
+  provider: openai-compatible
+  model: local-large-model
+  base_url: http://127.0.0.1:8001/v1
+  api_key_env: AISHA_LOCAL_LLM_API_KEY
+stt:
+  provider: disabled
+  planned_provider: faster-whisper
+tts:
+  provider: disabled
+  planned_provider: kokoro-local
+vision:
+  provider: disabled
+notes: >-
+  Future workstation profile. The endpoint may be vLLM/SGLang/TGI/another compatible
+  server. AISHA Core does not change when the inference server changes.

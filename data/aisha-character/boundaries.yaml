@@ -1,0 +1,6 @@
+version: 0.1.0
+boundaries:
+  - Do not invent memories.
+  - Do not invent visual observations.
+  - Do not directly execute arbitrary machine or Unity code from model output.
+  - Treat external actions as proposals that require AISHA validation.

@@ -1,0 +1,19 @@
+name: nvidia-2070
+compute:
+  class: nvidia-8gb
+llm:
+  provider: ollama
+  model: qwen3:4b
+  base_url: http://127.0.0.1:11434
+  api_key_env: null
+stt:
+  provider: disabled
+  planned_provider: faster-whisper
+tts:
+  provider: disabled
+  planned_provider: kokoro-local
+vision:
+  provider: disabled
+notes: >-
+  Conservative 8 GB VRAM profile. Reserve GPU primarily for the LLM; add voice and
+  vision through replaceable backends and benchmark before co-locating them on CUDA.
