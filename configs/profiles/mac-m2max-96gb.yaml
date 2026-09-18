@@ -1,0 +1,22 @@
+name: mac-m2max-96gb
+compute:
+  class: apple-silicon-high-memory
+  chip: Apple M2 Max
+  unified_memory_gb: 96
+llm:
+  provider: ollama
+  model: qwen3.5:35b-mlx
+  base_url: http://127.0.0.1:11434
+  api_key_env: null
+stt:
+  provider: disabled
+  planned_provider: mlx-whisper
+tts:
+  provider: disabled
+  planned_provider: kokoro-local
+vision:
+  provider: disabled
+notes: >-
+  Primary AISHA development profile for the M2 Max / 96 GB Mac. Keep model
+  weights and Ollama outside Git. Start with 32K effective application context
+  even when the model supports more; AISHA memory will own long-term recall.

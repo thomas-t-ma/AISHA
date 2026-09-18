@@ -1,0 +1,45 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# AISHA runtime/private state
+.aisha-data/
+*.db
+*.sqlite
+*.sqlite3
+runtime/
+logs/
+cache/
+
+# Local model/data artifacts
+models/
+checkpoints/
+datasets/private/
+data/audio/
+data/video/
+data/runtime/
+data/conversations/
+data/memories/
+*.gguf
+*.safetensors
+
+# JS / Studio
+node_modules/
+dist/
+
+# Unity generated content
+apps/aisha-body/Library/
+apps/aisha-body/Temp/
+apps/aisha-body/Logs/
+apps/aisha-body/obj/
