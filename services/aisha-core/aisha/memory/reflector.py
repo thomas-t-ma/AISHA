@@ -90,7 +90,7 @@ class OllamaReflector:
 
         raw = data.get("message", {}).get("content", "")
         if not isinstance(raw, str):
-            raise ValueError("Memory reflection returned no text; no beliefs saved")
+            raise TypeError("Memory reflection returned no text; no beliefs saved")
         raw = raw.strip()
 
         # The MLX runner may return a Markdown JSON code fence. Only accept
@@ -107,5 +107,5 @@ class OllamaReflector:
             logger.warning("Memory reflection returned invalid JSON; discarded")
             raise ValueError("Memory reflection did not return JSON; no beliefs saved") from None
         if not isinstance(parsed, dict) or not isinstance(parsed.get("memories"), list):
-            raise ValueError("Memory reflection returned an invalid memory structure")
+            raise TypeError("Memory reflection returned an invalid memory structure")
         return [item for item in parsed["memories"][:2] if isinstance(item, dict)]
