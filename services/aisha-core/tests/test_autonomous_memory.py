@@ -257,6 +257,8 @@ async def test_reflection_diagnostics_distinguish_rejected_from_no_candidate(tmp
     assert status["last_result"]["proposed"] == 1
     assert status["last_result"]["saved"] == 0
     assert status["last_result"]["rejected"] == 1
+    assert status["last_result"]["rejections"][0]["reason"] == "quote_not_in_user_message"
+    assert status["last_result"]["rejections"][0]["topic_key"] == "career"
     assert await ledger.list_beliefs() == []
 
 
@@ -264,3 +266,55 @@ def test_memory_reflection_prompt_prioritizes_undecided_plans():
     assert "PRIORITY: A user's unresolved real-world decision" in REFLECTION_SYSTEM
     assert "ONE atomic claim per memory" in REFLECTION_SYSTEM
     assert "distinct topic_key for that decision" in REFLECTION_SYSTEM
+
+
+@pytest.mark.asyncio
+async def test_rejection_reasons_identify_duplicate_topic_and_bad_revision(tmp_path):
+    store = AISHAStore(tmp_path / "ledger.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    episode = await ledger.record_episode(
+        session_id="session_test",
+        turn_id="turn_test",
+        user_message_id="msg_user",
+        assistant_message_id="msg_assistant",
+        user_text="I might switch jobs, but have not decided.",
+        assistant_text="A response that is not evidence.",
+    )
+    proposal = {
+        "action": "add",
+        "target_belief_id": None,
+        "topic_key": "job-decision",
+        "text": "The user's job decision is unresolved.",
+        "epistemic_status": "uncertain",
+        "source_quote": "might switch jobs",
+        "open_question": "Will the user switch?",
+    }
+    saved, reason = await ledger.apply_with_reason(episode=episode, action=proposal)
+    assert saved is not None and reason == "saved"
+    duplicate, reason = await ledger.apply_with_reason(episode=episode, action=proposal)
+    assert duplicate is None and reason == "topic_already_exists_use_revision"
+
+    missing_id, reason = await ledger.apply_with_reason(
+        episode=episode,
+        action={**proposal, "action": "revise", "target_belief_id": None},
+    )
+    assert missing_id is None and reason == "missing_revision_target"
+    mismatch, reason = await ledger.apply_with_reason(
+        episode=episode,
+        action={
+            **proposal,
+            "action": "revise",
+            "target_belief_id": saved["belief_id"],
+            "topic_key": "some-other-topic",
+        },
+    )
+    assert mismatch is None and reason == "revision_topic_mismatch"
+
+    no_quote, reason = await ledger.apply_with_reason(
+        episode=episode,
+        action={**proposal, "source_quote": "I have already switched."},
+    )
+    assert no_quote is None and reason == "quote_not_in_user_message"
+    assert len(await ledger.versions(saved["belief_id"])) == 1

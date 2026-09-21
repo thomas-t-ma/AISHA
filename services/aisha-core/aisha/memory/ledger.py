@@ -163,7 +163,17 @@ class ExperienceLedger:
         episode: dict,
         action: dict,
     ) -> dict | None:
-        """Atomically add/revise a grounded belief; reject unsupported model output."""
+        """Compatibility wrapper for callers that only need the saved belief."""
+        saved, _reason = await self.apply_with_reason(episode=episode, action=action)
+        return saved
+
+    async def apply_with_reason(
+        self,
+        *,
+        episode: dict,
+        action: dict,
+    ) -> tuple[dict | None, str]:
+        """Atomically apply or return a stable, non-sensitive rejection reason."""
         quote = action.get("source_quote", "")
         text = action.get("text", "")
         topic_key = action.get("topic_key", "")
@@ -172,36 +182,39 @@ class ExperienceLedger:
         operation = action.get("action")
         target = action.get("target_belief_id")
 
-        if (
-            not isinstance(quote, str)
-            or not quote.strip()
-            or quote not in episode["user_text"]
-            or not isinstance(text, str)
-            or not (1 <= len(text.strip()) <= 300)
-            or not isinstance(topic_key, str)
-            or not (1 <= len(topic_key.strip()) <= 80)
-            or status not in ALLOWED_STATUSES
-            or operation not in {"add", "revise"}
-            or (question is not None and (not isinstance(question, str) or len(question) > 200))
+        if not isinstance(quote, str) or not quote.strip():
+            return None, "empty_source_quote"
+        if quote not in episode["user_text"]:
+            return None, "quote_not_in_user_message"
+        if not isinstance(text, str) or not (1 <= len(text.strip()) <= 300):
+            return None, "invalid_memory_text"
+        if not isinstance(topic_key, str) or not (1 <= len(topic_key.strip()) <= 80):
+            return None, "invalid_topic_key"
+        if status not in ALLOWED_STATUSES:
+            return None, "invalid_epistemic_status"
+        if operation not in {"add", "revise"}:
+            return None, "invalid_action"
+        if question is not None and (
+            not isinstance(question, str) or len(question) > 200
         ):
-            return None
+            return None, "invalid_open_question"
 
         # A revision must identify an existing belief. "Add" cannot overwrite a
         # belief just because the model guessed the same topic key.
-        if operation == "revise" and not isinstance(target, str):
-            return None
+        if operation == "revise" and (not isinstance(target, str) or not target):
+            return None, "missing_revision_target"
 
         now = datetime.now(UTC).isoformat()
         clean_key = topic_key.strip().lower()
         question = question.strip() if question else None
 
-        def work() -> dict | None:
+        def work() -> tuple[dict | None, str]:
             with self.store._connect() as db:
                 if operation == "add":
                     if db.execute(
                         "SELECT 1 FROM auto_beliefs WHERE topic_key = ?", (clean_key,)
                     ).fetchone():
-                        return None
+                        return None, "topic_already_exists_use_revision"
                     belief_id = f"belief_{uuid4().hex}"
                     revision = 1
                     db.execute(
@@ -221,8 +234,10 @@ class ExperienceLedger:
                         "SELECT belief_id, topic_key, revision FROM auto_beliefs WHERE belief_id = ?",
                         (target,),
                     ).fetchone()
-                    if row is None or row["topic_key"] != clean_key:
-                        return None
+                    if row is None:
+                        return None, "revision_target_not_found"
+                    if row["topic_key"] != clean_key:
+                        return None, "revision_topic_mismatch"
                     belief_id = row["belief_id"]
                     revision = row["revision"] + 1
                     db.execute(
@@ -252,6 +267,6 @@ class ExperienceLedger:
                 )
                 return dict(db.execute(
                     "SELECT * FROM auto_beliefs WHERE belief_id = ?", (belief_id,)
-                ).fetchone())
+                ).fetchone()), "saved"
 
         return await asyncio.to_thread(work)

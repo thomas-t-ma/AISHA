@@ -100,6 +100,17 @@ export default function LearnedMemory() {
               : ''}
         </p>
       )}
+      {status?.last_result?.rejections?.map((failure, index) => (
+        <div className="memory-error" key={status.last_result?.episode_id + ':' + index}>
+          Rejected {failure.action || 'proposal'} for {failure.topic_key || 'unknown topic'}:
+          {' '}{failure.reason.replaceAll('_', ' ')}
+          {failure.source_quote && (
+            <div className="learned-quote">
+              Proposed source: “{failure.source_quote}”
+            </div>
+          )}
+        </div>
+      ))}
       {status?.last_error && (
         <p className="memory-error">Last reflection error: {status.last_error}</p>
       )}

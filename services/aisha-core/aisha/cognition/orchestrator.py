@@ -66,17 +66,27 @@ class AISHAOrchestrator:
             proposals = await self.reflector.reflect(episode["user_text"], beliefs)
             applied = 0
             rejected = 0
+            rejections: list[dict] = []
             for proposal in proposals[:3]:
-                saved = await self.ledger.apply(episode=episode, action=proposal)
+                saved, reason = await self.ledger.apply_with_reason(
+                    episode=episode, action=proposal
+                )
                 if saved is not None:
                     applied += 1
                 else:
                     rejected += 1
+                    rejections.append({
+                        "reason": reason,
+                        "action": str(proposal.get("action", ""))[:20],
+                        "topic_key": str(proposal.get("topic_key", ""))[:80],
+                        "source_quote": str(proposal.get("source_quote", ""))[:180],
+                    })
             result = {
                 "episode_id": episode["episode_id"],
                 "proposed": len(proposals[:3]),
                 "saved": applied,
                 "rejected": rejected,
+                "rejections": rejections,
                 "outcome": (
                     "stored" if applied
                     else "rejected" if rejected
@@ -98,7 +108,7 @@ class AISHAOrchestrator:
             self._last_reflection_error = f"{type(exc).__name__}: {exc}"
             self._last_reflection_result = {
                 "episode_id": episode["episode_id"], "outcome": "failed",
-                "proposed": 0, "saved": 0, "rejected": 0,
+                "proposed": 0, "saved": 0, "rejected": 0, "rejections": [],
             }
             logger.warning("AISHA memory reflection failed: %s", self._last_reflection_error)
             await self._persisted_event(
