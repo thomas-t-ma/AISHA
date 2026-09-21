@@ -1,4 +1,4 @@
-import type { AISHAEvent, ModelRun, RuntimeHealth, StoredMessage } from './types';
+import type { AISHAEvent, MemoryRecord, ModelRun, RuntimeHealth, StoredMessage } from './types';
 
 async function json<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -27,4 +27,31 @@ export function getEvents(sessionId: string): Promise<AISHAEvent[]> {
 
 export function getRuns(sessionId: string): Promise<ModelRun[]> {
   return json<ModelRun[]>('/v1/sessions/' + encodeURIComponent(sessionId) + '/model-runs');
+}
+
+export function getMemories(): Promise<MemoryRecord[]> {
+  return json<MemoryRecord[]>('/v1/memories');
+}
+
+export function addMemory(text: string, sourceSessionId: string): Promise<MemoryRecord> {
+  return json<MemoryRecord>('/v1/memories', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, source_session_id: sourceSessionId || null }),
+  });
+}
+
+export function editMemory(memoryId: string, text: string): Promise<MemoryRecord> {
+  return json<MemoryRecord>('/v1/memories/' + encodeURIComponent(memoryId), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+}
+
+export async function removeMemory(memoryId: string): Promise<void> {
+  const response = await fetch('/v1/memories/' + encodeURIComponent(memoryId), {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Cannot remove memory: HTTP ' + response.status);
 }

@@ -149,3 +149,24 @@ A future high-VRAM workstation can use `nvidia-high` or another checked-in profi
 - large checkpoints or Gaussian captures
 
 See `docs/COMPUTE_BACKENDS.md` and `docs/MAC_FIRST_PLAN.md`.
+
+## Explicit cross-session memory (Milestone 4 foundation)
+
+AISHA has a separate local SQLite table for user-approved memories. Studio's
+**Memory** panel can add, review, edit, and delete them. Memories are injected as
+quoted reference data into new turns, even in a **new session**. A stored chat
+transcript is not automatically a remembered fact. The first version deliberately
+does **not** extract user facts automatically or call embeddings/vector search:
+only memories you explicitly save are eligible for reuse.
+
+The 12 most recently updated memories (up to 2,400 characters combined) can be
+supplied to each response. Removing a memory stops it from being supplied to
+future turns, but does not rewrite old conversations, database backups, or
+answers already generated. The memory table and chat remain in the local,
+gitignored `.aisha-data` SQLite database; do not expose this unauthenticated
+single-user development server on a public interface.
+
+To try: open Memory in Studio, add a harmless fact such as a preferred nickname,
+start **New conversation**, and ask AISHA what you explicitly asked her to
+remember. Edit/remove that entry and ask again in another new session.
+Voice work remains isolated on `feature/voice-v1` until you have a microphone.

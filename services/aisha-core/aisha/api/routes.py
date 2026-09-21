@@ -1,9 +1,38 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(prefix="/v1")
+
+LOCAL_STUDIO_ORIGINS = {
+    "http://127.0.0.1:5173", "http://localhost:5173",
+    "http://127.0.0.1:8000", "http://localhost:8000",
+}
+
+
+def _check_local_origin(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if origin and origin not in LOCAL_STUDIO_ORIGINS:
+        raise HTTPException(status_code=403, detail="Unrecognized local client origin")
+
+
+class MemoryWrite(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+    @field_validator("text")
+    @classmethod
+    def strip_nonblank(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("Memory cannot be blank")
+        return clean
+
+
+class MemoryCreate(MemoryWrite):
+    source_session_id: str | None = Field(default=None, max_length=96)
+
 
 
 class SessionResponse(BaseModel):
@@ -50,6 +79,37 @@ async def session_messages(
     limit: int = Query(default=200, ge=1, le=500),
 ):
     return await request.app.state.aisha["store"].session_messages(session_id, limit=limit)
+
+
+@router.get("/memories")
+async def list_memories(request: Request, limit: int = Query(default=250, ge=1, le=500)):
+    return await request.app.state.aisha["store"].list_memories(limit=limit)
+
+
+@router.post("/memories", status_code=201)
+async def create_memory(request: Request, memory: MemoryCreate):
+    _check_local_origin(request)
+    return await request.app.state.aisha["store"].create_memory(
+        memory.text, source_session_id=memory.source_session_id
+    )
+
+
+@router.patch("/memories/{memory_id}")
+async def update_memory(request: Request, memory_id: str, memory: MemoryWrite):
+    _check_local_origin(request)
+    updated = await request.app.state.aisha["store"].update_memory(memory_id, memory.text)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return updated
+
+
+@router.delete("/memories/{memory_id}", status_code=204)
+async def delete_memory(request: Request, memory_id: str):
+    _check_local_origin(request)
+    deleted = await request.app.state.aisha["store"].delete_memory(memory_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return Response(status_code=204)
 
 
 @router.get("/sessions/{session_id}/events")

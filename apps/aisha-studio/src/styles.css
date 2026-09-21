@@ -254,3 +254,49 @@ button:disabled { cursor: not-allowed; opacity: .44; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+
+/* Explicit memory editor. Sits above the developer inspector, including on mobile. */
+.memory-backdrop {
+  position: fixed; inset: 0; z-index: 20; background: #090712bd;
+  display: grid; place-items: center; padding: 18px;
+}
+.memory-panel {
+  width: min(100%, 660px); max-height: min(86dvh, 760px); overflow-y: auto;
+  padding: 28px; background: #1b1729; border: 1px solid #4d4069;
+  border-radius: 19px; box-shadow: 0 28px 96px #0009;
+}
+.memory-head { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.memory-head h2 { margin: 7px 0; font-size: 24px; }
+.memory-head p, .memory-help {
+  color: #aca3c6; font-size: 12px; line-height: 1.65; margin: 8px 0 16px;
+}
+.memory-close { font-size: 26px; color: #e2d8f4; background: none; border: 0; }
+.memory-form textarea, .memory-edit textarea {
+  display: block; width: 100%; border-radius: 10px; resize: vertical;
+  background: #231e34; color: #f0eaf8; border: 1px solid #534766;
+  padding: 12px; line-height: 1.5; outline: none;
+}
+.memory-form textarea:focus, .memory-edit textarea:focus { border-color: #ac92e0; }
+.memory-form-actions, .memory-actions {
+  display: flex; flex-wrap: wrap; justify-content: space-between;
+  align-items: center; gap: 10px; margin-top: 10px;
+}
+.memory-actions { justify-content: flex-start; }
+.memory-count { color: #8f86a7; font-size: 11px; }
+.memory-button {
+  color: #e8defa; background: #322840; border: 1px solid #655379;
+  padding: 8px 12px; border-radius: 8px; font-size: 11px;
+}
+.memory-button.primary { color: #20192c; background: #bcb0ed; }
+.memory-button.danger { color: #f0b8b9; border-color: #764453; }
+.memory-list { display: grid; gap: 12px; margin-top: 20px; }
+.memory-item {
+  padding: 16px; border: 1px solid #3e344f; border-radius: 12px;
+  background: #241d33;
+}
+.memory-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; line-height: 1.6; font-size: 13px; }
+.memory-provenance { margin-top: 8px; color: #9f93b5; font-size: 10px; overflow-wrap: anywhere; }
+.memory-error { color: #ffb8b8; font-size: 11px; padding: 9px 0; }
+@media (max-width: 820px) {
+  .memory-panel { padding: 19px; max-height: 94dvh; }
+}

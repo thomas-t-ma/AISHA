@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -56,6 +57,17 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_session_timestamp
 ON events(session_id, timestamp);
+
+CREATE TABLE IF NOT EXISTS memories (
+    memory_id TEXT PRIMARY KEY,
+    text TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'user_explicit',
+    source_session_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memories_updated
+ON memories(updated_at DESC);
 """
 
 
@@ -305,3 +317,75 @@ class AISHAStore:
             run["backend_metrics"] = json.loads(raw_metrics) if raw_metrics else {}
             runs.append(run)
         return runs
+
+    async def create_memory(self, text: str, source_session_id: str | None = None) -> dict:
+        """Explicit user-approved memory; never inferred from chat automatically."""
+        memory_id = f"mem_{uuid4().hex}"
+        now = datetime.now(UTC).isoformat()
+
+        def work() -> None:
+            with self._connect() as db:
+                db.execute(
+                    """
+                    INSERT INTO memories (
+                        memory_id, text, source_type, source_session_id, created_at, updated_at
+                    ) VALUES (?, ?, 'user_explicit', ?, ?, ?)
+                    """,
+                    (memory_id, text, source_session_id, now, now),
+                )
+
+        await asyncio.to_thread(work)
+        return {
+            "memory_id": memory_id, "text": text, "source_type": "user_explicit",
+            "source_session_id": source_session_id, "created_at": now, "updated_at": now,
+        }
+
+    async def list_memories(self, limit: int = 250) -> list[dict]:
+        safe_limit = max(1, min(limit, 500))
+
+        def work() -> list[sqlite3.Row]:
+            with self._connect() as db:
+                return list(
+                    db.execute(
+                        """
+                        SELECT memory_id, text, source_type, source_session_id, created_at, updated_at
+                        FROM memories ORDER BY updated_at DESC, memory_id DESC LIMIT ?
+                        """,
+                        (safe_limit,),
+                    ).fetchall()
+                )
+
+        return [dict(row) for row in await asyncio.to_thread(work)]
+
+    async def update_memory(self, memory_id: str, text: str) -> dict | None:
+        now = datetime.now(UTC).isoformat()
+
+        def work() -> dict | None:
+            with self._connect() as db:
+                cursor = db.execute(
+                    "UPDATE memories SET text = ?, updated_at = ? WHERE memory_id = ?",
+                    (text, now, memory_id),
+                )
+                if not cursor.rowcount:
+                    return None
+                row = db.execute(
+                    """
+                    SELECT memory_id, text, source_type, source_session_id, created_at, updated_at
+                    FROM memories WHERE memory_id = ?
+                    """,
+                    (memory_id,),
+                ).fetchone()
+                return dict(row)
+
+        return await asyncio.to_thread(work)
+
+    async def delete_memory(self, memory_id: str) -> bool:
+        def work() -> bool:
+            with self._connect() as db:
+                return bool(
+                    db.execute(
+                        "DELETE FROM memories WHERE memory_id = ?", (memory_id,)
+                    ).rowcount
+                )
+
+        return await asyncio.to_thread(work)
