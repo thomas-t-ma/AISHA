@@ -51,3 +51,12 @@ export interface TurnLatency {
   firstTokenMs: number | null;
   totalMs: number | null;
 }
+
+export interface MemoryRecord {
+  memory_id: string;
+  text: string;
+  source_type: string;
+  source_session_id: string | null;
+  created_at: string;
+  updated_at: string;
+}

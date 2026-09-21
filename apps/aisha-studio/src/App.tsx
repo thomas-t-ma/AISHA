@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { createSession, getEvents, getHealth, getMessages, getRuns } from './api';
+import MemoryPanel from './MemoryPanel';
 import type { AISHAEvent, ChatMessage, ModelRun, RuntimeHealth, TurnLatency } from './types';
 
 const SESSION_KEY = 'aisha.studio.session.v1';
@@ -62,6 +63,7 @@ export default function App() {
   const [runs, setRuns] = useState<ModelRun[]>([]);
   const [events, setEvents] = useState<AISHAEvent[]>([]);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [inspectorTab, setInspectorTab] = useState<'runs' | 'events'>('runs');
   const [selectedRunId, setSelectedRunId] = useState('');
   const [notice, setNotice] = useState('');
@@ -341,6 +343,7 @@ export default function App() {
             <h1>Talk to AISHA<span className="title-star">✦</span></h1>
           </div>
           <div className="topbar-actions">
+            <button className="inspector-toggle" onClick={() => setMemoryOpen(true)}>Memory ✦</button>
             <span className={'connection-badge ' + connection}>
               <span className="status-dot" /> {statusText}
             </span>
@@ -418,6 +421,7 @@ export default function App() {
         </div>
       </main>
 
+      {memoryOpen && <MemoryPanel sessionId={sessionId} onClose={() => setMemoryOpen(false)} />}
       {inspectorOpen && (
         <aside className="inspector" aria-label="Developer inspector">
           <div className="inspector-heading">
