@@ -65,6 +65,7 @@ export interface AutomaticMemoryStatus {
   enabled: boolean;
   active_reflections: number;
   last_error: string | null;
+  last_result: { episode_id: string; proposed: number; saved: number; rejected: number; outcome: 'stored' | 'rejected' | 'no_candidate' | 'failed' } | null;
 }
 
 export interface LearnedBelief {

@@ -34,6 +34,7 @@ class AISHAOrchestrator:
         self.reflector = reflector
         self._reflections: set[asyncio.Task[None]] = set()
         self._last_reflection_error: str | None = None
+        self._last_reflection_result: dict | None = None
         self._active_turns: dict[str, tuple[str, asyncio.Event]] = {}
         self._active_turns_lock = asyncio.Lock()
 
@@ -42,6 +43,7 @@ class AISHAOrchestrator:
             "enabled": self.reflector is not None and self.ledger is not None,
             "active_reflections": len(self._reflections),
             "last_error": self._last_reflection_error,
+            "last_result": self._last_reflection_result,
         }
 
     async def wait_for_reflections(self) -> None:
@@ -63,22 +65,41 @@ class AISHAOrchestrator:
             beliefs = await self.ledger.list_beliefs(limit=25)
             proposals = await self.reflector.reflect(episode["user_text"], beliefs)
             applied = 0
-            for proposal in proposals[:2]:
+            rejected = 0
+            for proposal in proposals[:3]:
                 saved = await self.ledger.apply(episode=episode, action=proposal)
                 if saved is not None:
                     applied += 1
+                else:
+                    rejected += 1
+            result = {
+                "episode_id": episode["episode_id"],
+                "proposed": len(proposals[:3]),
+                "saved": applied,
+                "rejected": rejected,
+                "outcome": (
+                    "stored" if applied
+                    else "rejected" if rejected
+                    else "no_candidate"
+                ),
+            }
+            self._last_reflection_result = result
             self._last_reflection_error = None
             await self._persisted_event(
                 session_id=episode["session_id"],
                 turn_id=episode["turn_id"],
                 type_="aisha.memory.reflection_finished",
-                payload={"episode_id": episode["episode_id"], "saved": applied},
+                payload=result,
             )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001 - keep optional reflection isolated
             # An unavailable local reflection model must not break chat.
             self._last_reflection_error = f"{type(exc).__name__}: {exc}"
+            self._last_reflection_result = {
+                "episode_id": episode["episode_id"], "outcome": "failed",
+                "proposed": 0, "saved": 0, "rejected": 0,
+            }
             logger.warning("AISHA memory reflection failed: %s", self._last_reflection_error)
             await self._persisted_event(
                 session_id=episode["session_id"],

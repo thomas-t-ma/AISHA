@@ -12,7 +12,7 @@ from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.contracts.turns import TurnContext
 from aisha.main import app
 from aisha.memory.ledger import ExperienceLedger
-from aisha.memory.reflector import OllamaReflector
+from aisha.memory.reflector import REFLECTION_SYSTEM, OllamaReflector
 from aisha.providers.base import LLMStreamChunk
 from aisha.settings import Settings
 from aisha.storage.database import AISHAStore
@@ -87,6 +87,8 @@ async def test_autonomous_memory_forms_revises_and_forgets_across_sessions(tmp_p
     assert beliefs[0]["epistemic_status"] == "uncertain"
     assert beliefs[0]["source_quote"] == "might switch jobs"
     assert len(await ledger.list_episodes()) == 1
+    assert orch.memory_status()["last_result"]["outcome"] == "stored"
+    assert orch.memory_status()["last_result"]["saved"] == 1
 
     second = await store.create_session()
     _ = [
@@ -108,6 +110,7 @@ async def test_autonomous_memory_forms_revises_and_forgets_across_sessions(tmp_p
     assert "Thomas decided to stay" in provider.prompts[-1]
     await orch.wait_for_reflections()
     assert reflector.seen_user_text[-1] == "Hello again."
+    assert orch.memory_status()["last_result"]["outcome"] == "no_candidate"
 
     assert await ledger.forget_belief(beliefs[0]["belief_id"])
     fourth = await store.create_session()
@@ -217,3 +220,47 @@ async def test_reflector_rejects_unstructured_prose(monkeypatch):
     reflector = OllamaReflector('qwen3.5:35b-mlx', 'http://127.0.0.1:11434')
     with pytest.raises(ValueError, match='did not return JSON'):
         await reflector.reflect('I might switch jobs soon.', [])
+
+
+@pytest.mark.asyncio
+async def test_reflection_diagnostics_distinguish_rejected_from_no_candidate(tmp_path):
+    store = AISHAStore(tmp_path / "data.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+
+    class UnsupportedReflection:
+        async def reflect(self, user_text: str, existing: list[dict]) -> list[dict]:
+            return [{
+                "action": "add",
+                "target_belief_id": None,
+                "topic_key": "career",
+                "text": "The user has definitely quit.",
+                "epistemic_status": "stated",
+                "source_quote": "the user has definitely quit",
+                "open_question": None,
+            }]
+
+    provider = ConversationProvider()
+    orch = AISHAOrchestrator(
+        store, load_persona(Settings(aisha_profile="mock").character_dir),
+        provider, ledger=ledger, reflector=UnsupportedReflection()
+    )
+    session = await store.create_session()
+    events = [event async for event in orch.stream_user_turn(
+        session, "I might switch jobs, but I have not decided."
+    )]
+    assert events[-1].type == "aisha.turn.finished"
+    await orch.wait_for_reflections()
+    status = orch.memory_status()
+    assert status["last_result"]["outcome"] == "rejected"
+    assert status["last_result"]["proposed"] == 1
+    assert status["last_result"]["saved"] == 0
+    assert status["last_result"]["rejected"] == 1
+    assert await ledger.list_beliefs() == []
+
+
+def test_memory_reflection_prompt_prioritizes_undecided_plans():
+    assert "PRIORITY: A user's unresolved real-world decision" in REFLECTION_SYSTEM
+    assert "ONE atomic claim per memory" in REFLECTION_SYSTEM
+    assert "distinct topic_key for that decision" in REFLECTION_SYSTEM

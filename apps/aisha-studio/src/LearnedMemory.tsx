@@ -87,6 +87,19 @@ export default function LearnedMemory() {
             ? 'Thinking about the last conversation…'
             : 'Automatic reflection is ready.'}
       </div>
+      {status?.last_result && (
+        <p className="learned-help" role="status">
+          Last reflection: {status.last_result.outcome.replace('_', ' ')} ·
+          {' '}{status.last_result.proposed} proposed ·
+          {' '}{status.last_result.saved} saved ·
+          {' '}{status.last_result.rejected} rejected
+          {status.last_result.outcome === 'no_candidate'
+            ? ' (the model proposed no memory for that message)'
+            : status.last_result.outcome === 'rejected'
+              ? ' (proposals failed grounding or revision checks)'
+              : ''}
+        </p>
+      )}
       {status?.last_error && (
         <p className="memory-error">Last reflection error: {status.last_error}</p>
       )}
@@ -107,11 +120,15 @@ export default function LearnedMemory() {
             <span className="learned-badge">{belief.epistemic_status}</span>
           </div>
           <div className="learned-quote">
-            You said: “{belief.source_quote}”
+            {belief.revision > 1 ? "New evidence for this revision" : "Source quote"}: “{belief.source_quote}”
           </div>
           {belief.open_question && (
             <div className="learned-question">Open question: {belief.open_question}</div>
           )}
+          {belief.revision > 1 && <p className="learned-help">
+            This quote supports the latest change. Earlier claims may rely on the
+            preceding source quotes under Revision history.
+          </p>}
           <div className="memory-provenance" title={belief.source_turn_id}>
             Source: {belief.source_session_id.slice(0, 19)}… ·
             {' '}{new Date(belief.updated_at).toLocaleString()}
