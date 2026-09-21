@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { addMemory, editMemory, getMemories, removeMemory } from './api';
+import LearnedMemory from './LearnedMemory';
 import type { MemoryRecord } from './types';
 
 interface Props {
@@ -86,17 +87,20 @@ export default function MemoryPanel({ sessionId, onClose }: Props) {
         aria-labelledby="memory-title">
         <div className="memory-head">
           <div>
-            <span className="eyebrow">EXPLICIT MEMORY · LOCAL ONLY</span>
+            <span className="eyebrow">EXPERIENCE & MEMORY · LOCAL ONLY</span>
             <h2 id="memory-title">What AISHA remembers</h2>
           </div>
           <button className="memory-close" onClick={onClose} aria-label="Close memory">×</button>
         </div>
         <p className="memory-help">
-          Write facts you want AISHA to know across conversations. She does not
-          automatically save or infer memories. You can edit or remove any entry.
-          Updates affect future turns, not messages AISHA has already written.
+          AISHA can form tentative beliefs from completed conversations and revise
+          them when she learns more. The manual notes below are optional.
+          Corrections and deletions affect future turns, not earlier chat history.
         </p>
 
+        <LearnedMemory />
+
+        <h3 className="memory-subhead">Your explicit notes</h3>
         <div className="memory-form">
           <label className="small-label" htmlFor="memory-input">NEW USER-APPROVED MEMORY</label>
           <textarea id="memory-input" rows={3} maxLength={500} value={newText}
@@ -113,7 +117,7 @@ export default function MemoryPanel({ sessionId, onClose }: Props) {
         <div className="memory-list">
           {loading && <p className="memory-help">Loading memories…</p>}
           {!loading && memories.length === 0 && (
-            <p className="memory-help">No saved memories yet. Add one above to test cross-session recall.</p>
+            <p className="memory-help">No manually saved notes. AISHA can still remember things on her own.</p>
           )}
           {memories.map((memory) => (
             <article className="memory-item" key={memory.memory_id}>

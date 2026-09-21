@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     aisha_host: str = "127.0.0.1"
     aisha_port: int = 8000
     aisha_log_level: str = "INFO"
+    aisha_auto_memory: bool = True
 
     aisha_llm_provider: str | None = None
     aisha_llm_model: str | None = None

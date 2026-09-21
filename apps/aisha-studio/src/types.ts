@@ -60,3 +60,35 @@ export interface MemoryRecord {
   created_at: string;
   updated_at: string;
 }
+
+export interface AutomaticMemoryStatus {
+  enabled: boolean;
+  active_reflections: number;
+  last_error: string | null;
+}
+
+export interface LearnedBelief {
+  belief_id: string;
+  topic_key: string;
+  text: string;
+  epistemic_status: 'stated' | 'inferred' | 'uncertain';
+  source_quote: string;
+  source_session_id: string;
+  source_turn_id: string;
+  open_question: string | null;
+  revision: number;
+  updated_at: string;
+}
+
+export interface BeliefVersion {
+  version_id: string;
+  belief_id: string;
+  revision: number;
+  text: string;
+  epistemic_status: string;
+  source_quote: string;
+  source_session_id: string;
+  source_turn_id: string;
+  open_question: string | null;
+  recorded_at: string;
+}

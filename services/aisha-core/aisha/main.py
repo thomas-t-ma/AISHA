@@ -10,6 +10,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from aisha.api.routes import router
 from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
+from aisha.memory.ledger import ExperienceLedger
+from aisha.memory.reflector import OllamaReflector
 from aisha.providers.base import AISHAProviderError
 from aisha.providers.registry import build_llm_provider
 from aisha.settings import Settings
@@ -45,7 +47,18 @@ async def lifespan(app: FastAPI):
             logger.warning("AISHA model preload failed; continuing cold: %s", exc)
             warmup_metrics = {"preloaded": False, "error": str(exc)}
 
-    orchestrator = AISHAOrchestrator(store, persona, provider)
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    reflector = None
+    if settings.aisha_auto_memory and profile.llm.provider == "ollama" and profile.llm.base_url:
+        reflector = OllamaReflector(
+            model=profile.llm.model,
+            base_url=profile.llm.base_url,
+            keep_alive=profile.llm.keep_alive,
+        )
+    orchestrator = AISHAOrchestrator(
+        store, persona, provider, ledger=ledger, reflector=reflector
+    )
 
     app.state.aisha = {
         "settings": settings,
@@ -54,9 +67,11 @@ async def lifespan(app: FastAPI):
         "store": store,
         "provider": provider,
         "orchestrator": orchestrator,
+        "ledger": ledger,
         "warmup_metrics": warmup_metrics,
     }
     yield
+    await orchestrator.stop_reflections()
 
 
 app = FastAPI(title="AISHA Core", version="0.2.0", lifespan=lifespan)
