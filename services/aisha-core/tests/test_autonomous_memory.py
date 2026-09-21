@@ -4,7 +4,6 @@ import json
 from collections.abc import AsyncIterator
 
 import httpx
-
 import pytest
 from fastapi.testclient import TestClient
 
