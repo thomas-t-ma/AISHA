@@ -12,6 +12,7 @@ from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.contracts.turns import TurnContext
 from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
+from aisha.memory.quotes import original_source_quote
 from aisha.providers.base import LLMStreamChunk
 from aisha.settings import Settings
 from aisha.storage.database import AISHAStore
@@ -205,3 +206,85 @@ async def test_ollama_checker_uses_unstructured_mlx_compatible_request(
     assert len(captured) == 1
     assert "format" not in captured[0]
     assert captured[0]["think"] is False
+
+
+@pytest.mark.parametrize(
+    ("user_text", "proposed", "expected"),
+    [
+        (
+            "My current job doesn’t offer much patient contact.",
+            "My current job doesn't offer much patient contact.",
+            "My current job doesn’t offer much patient contact.",
+        ),
+        (
+            'She said “hello” to me.',
+            'She said "hello" to me.',
+            'She said “hello” to me.',
+        ),
+        (
+            "I might switch jobs, but I have not decided.",
+            "I have switched jobs",
+            None,
+        ),
+        (
+            "My current job doesn’t offer much patient contact.",
+            "My current job doesn't provide much patient contact.",
+            None,
+        ),
+        (
+            "My current job doesn’t offer much patient contact.",
+            "my current job doesn't offer much patient contact.",
+            None,
+        ),
+    ],
+)
+def test_source_quote_recovers_only_original_typographic_punctuation(
+    user_text, proposed, expected
+):
+    assert original_source_quote(user_text, proposed) == expected
+
+
+@pytest.mark.asyncio
+async def test_apostrophe_recovery_enables_checked_atomic_memory(tmp_path):
+    class TypographicReflection:
+        async def reflect(self, user_text: str, existing: list[dict]) -> list[dict]:
+            return [{
+                "action": "add",
+                "topic_key": "patient_contact_at_current_job",
+                "target_belief_id": None,
+                "text": "The user's current job offers limited patient contact.",
+                "epistemic_status": "stated",
+                "source_quote": "My current job doesn't offer much patient contact.",
+                "open_question": None,
+            }]
+
+    store = AISHAStore(tmp_path / "aisha.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    checker = CheckerProbe(supported=True)
+    orch = AISHAOrchestrator(
+        store, load_persona(Settings(aisha_profile="mock").character_dir),
+        ChatProbe(), ledger=ledger, reflector=TypographicReflection(),
+        evidence_verifier=checker,
+    )
+    session = await store.create_session()
+    _ = [event async for event in orch.stream_user_turn(
+        session, "My current job doesn’t offer much patient contact."
+    )]
+    await orch.wait_for_reflections()
+    beliefs = await ledger.list_beliefs()
+    assert len(beliefs) == 1
+    assert beliefs[0]["evidence_status"] == "verified"
+    assert beliefs[0]["source_quote"] == (
+        "My current job doesn’t offer much patient contact."
+    )
+    assert checker.queries[0]["source_quote"] == beliefs[0]["source_quote"]
+    assert orch.memory_status()["last_result"]["outcome"] == "stored"
+
+
+def test_reflector_discourages_composite_legacy_revisions():
+    from aisha.memory.reflector import REFLECTION_SYSTEM
+
+    assert "patient_contact_at_current_job" in REFLECTION_SYSTEM
+    assert "Never revise a composite biography" in REFLECTION_SYSTEM

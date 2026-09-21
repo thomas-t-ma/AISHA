@@ -11,6 +11,7 @@ from aisha.contracts.events import AISHAEvent
 from aisha.contracts.turns import Message, TurnContext
 from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
+from aisha.memory.quotes import original_source_quote
 from aisha.memory.reflector import OllamaReflector
 from aisha.providers.base import AISHAProviderError
 from aisha.storage.database import AISHAStore
@@ -72,13 +73,14 @@ class AISHAOrchestrator:
             rejected = 0
             rejections: list[dict] = []
             for proposal in proposals[:3]:
-                quote = proposal.get("source_quote")
-                if (
-                    self.evidence_verifier is not None
-                    and isinstance(quote, str)
-                    and quote.strip()
-                    and quote in episode["user_text"]
-                ):
+                # Models often straighten typographic apostrophes. Recover the
+                # ORIGINAL span of the recorded user message, never a paraphrase.
+                quote = original_source_quote(
+                    episode["user_text"], proposal.get("source_quote")
+                )
+                if quote is not None:
+                    proposal = {**proposal, "source_quote": quote}
+                if self.evidence_verifier is not None and quote is not None:
                     supported, reason = await self.evidence_verifier.check(proposal)
                     if supported:
                         saved, reason = await self.ledger.apply_with_reason(

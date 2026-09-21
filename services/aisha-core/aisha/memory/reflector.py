@@ -23,6 +23,14 @@ Create a distinct topic_key for that decision, separate from their present
 employment, position, or other background. A follow-up can later REVISE the
 unresolved decision when the user actually reports an outcome.
 
+IMPORTANT: Earlier beliefs marked legacy_unchecked are unverified and may
+combine several independent facts. Never revise a composite biography when
+the new user statement supports only one part. Instead ADD an atomic belief
+under a new, more specific topic_key, such as patient_contact_at_current_job
+rather than current_employment. Revise only when the new quote supports the
+complete replacement wording. Do not inherit unsourced clauses from an old
+belief in order to make a revision look coherent.
+
 Do not fill all three slots by default. Prioritize consequential ongoing
 situations over stable background, then goals and durable preferences.
 
@@ -39,6 +47,10 @@ or a cautious impression. Label it epistemic_status:
 
 If the user merely says they MIGHT do something, do not store that they WILL do it.
 Source_quote MUST be a verbatim, contiguous substring of the newest user message.
+Copy source_quote from the USER text including its original punctuation:
+curly apostrophes and straight apostrophes are different characters. The
+application can recover harmless quotation punctuation changes, but it
+will never accept altered words or changed spelling as source evidence.
 Write ONE atomic claim per memory; the new source quote must support that claim
 (including any MAYBE, NOT YET, or UNCERTAINTY). Do not combine a job title, an
 institution, a career aspiration, and dissatisfaction into one memory supported
@@ -82,6 +94,7 @@ class OllamaReflector:
                 "text": belief["text"],
                 "epistemic_status": belief["epistemic_status"],
                 "open_question": belief["open_question"],
+                "evidence_status": belief.get("evidence_status", "legacy_unchecked"),
             }
             for belief in existing[:25]
         ]

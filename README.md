@@ -218,3 +218,16 @@ notes and source episodes are untouched.
 Revisions require a new source quote for the full *new* wording. Earlier source
 quotes remain available in Revision history, rather than silently becoming
 proof for arbitrary additional clauses in a replacement belief.
+
+### Quotation punctuation and atomic follow-ups
+
+The reflector may straighten a typographic apostrophe when quoting a user:
+`doesn’t` versus `doesn't`. Core now resolves **only** these one-character
+quotation-punctuation differences against the actual user message, then passes
+the recovered **original exact quote** into the evidence checker and database.
+It does not fuzzy-match words, spelling, case, or changed meaning. Existing
+failed reflections are not replayed or backfilled automatically.
+
+The extraction prompt also distinguishes new, narrow facts (e.g. patient
+contact at the current job) from wholesale revisions of a legacy composite
+biography. The legacy entry itself is preserved, still marked unchecked.
