@@ -73,6 +73,7 @@ export interface LearnedBelief {
   topic_key: string;
   text: string;
   epistemic_status: 'stated' | 'inferred' | 'uncertain';
+  evidence_status: 'verified' | 'legacy_unchecked';
   source_quote: string;
   source_session_id: string;
   source_turn_id: string;
@@ -87,6 +88,7 @@ export interface BeliefVersion {
   revision: number;
   text: string;
   epistemic_status: string;
+  evidence_status: 'verified' | 'legacy_unchecked';
   source_quote: string;
   source_session_id: string;
   source_turn_id: string;

@@ -10,6 +10,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from aisha.api.routes import router
 from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
+from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.reflector import OllamaReflector
 from aisha.providers.base import AISHAProviderError
@@ -50,14 +51,21 @@ async def lifespan(app: FastAPI):
     ledger = ExperienceLedger(store)
     await ledger.initialize()
     reflector = None
+    evidence_verifier = None
     if settings.aisha_auto_memory and profile.llm.provider == "ollama" and profile.llm.base_url:
         reflector = OllamaReflector(
             model=profile.llm.model,
             base_url=profile.llm.base_url,
             keep_alive=profile.llm.keep_alive,
         )
+        evidence_verifier = OllamaEvidenceVerifier(
+            model=profile.llm.model,
+            base_url=profile.llm.base_url,
+            keep_alive=profile.llm.keep_alive,
+        )
     orchestrator = AISHAOrchestrator(
-        store, persona, provider, ledger=ledger, reflector=reflector
+        store, persona, provider, ledger=ledger, reflector=reflector,
+        evidence_verifier=evidence_verifier
     )
 
     app.state.aisha = {

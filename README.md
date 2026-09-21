@@ -192,3 +192,29 @@ does not launch a reflection model, so CI remains offline. The first revision
 uses recent beliefs (not semantic/vector retrieval), and model classifications
 are *fallible*: inspect the source and revisions before trusting conclusions.
 Reflections may be interrupted if Core shuts down immediately after a reply.
+
+## Memory integrity gate (experimental)
+
+Automatically proposed beliefs now receive a separate, local-model evidence check
+**before** AISHA writes them to SQLite. The checker assesses the entire proposed
+claim against the exact quote from the current user message; a partial match
+is not enough. The reflector and verifier both use the configured Ollama model
+without Ollama's MLX-incompatible structured-output `format` option. Both run
+*after* the visible answer; a failed check does not interrupt chat.
+
+A checked belief/version is labeled `verified` in storage and
+**Evidence checked (model-assisted)** in Studio. This means a separate LLM
+judged the new claim consistent with that quote—not a mathematical guarantee of
+truth. Evidence checks may reject good claims as well as bad ones; consult the
+existing per-reflection rejection reason.
+
+Historical learned beliefs are **preserved**, not silently rewritten. The schema
+labels them `legacy_unchecked`; Studio and the conversation prompt disclose
+that their evidence was not evaluated by this new check. In particular, review
+the older composite `current_employment` example manually rather than assuming
+the new verifier has retroactively fixed it. Existing explicit user-authored
+notes and source episodes are untouched.
+
+Revisions require a new source quote for the full *new* wording. Earlier source
+quotes remain available in Revision history, rather than silently becoming
+proof for arbitrary additional clauses in a replacement belief.
