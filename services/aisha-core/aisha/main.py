@@ -17,6 +17,15 @@ from aisha.storage.database import AISHAStore
 
 logger = logging.getLogger(__name__)
 
+# Studio uses Vite's same-origin development proxy. Reject browser WebSockets from
+# unrelated websites; command-line clients typically send no Origin header.
+LOCAL_WS_ORIGINS = {
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,6 +65,10 @@ app.include_router(router)
 
 @app.websocket("/v1/ws/{session_id}")
 async def conversation_socket(websocket: WebSocket, session_id: str):
+    origin = websocket.headers.get("origin")
+    if origin is not None and origin not in LOCAL_WS_ORIGINS:
+        await websocket.close(code=1008, reason="Unrecognized local client origin")
+        return
     await websocket.accept()
     orchestrator = websocket.app.state.aisha["orchestrator"]
     send_lock = asyncio.Lock()
