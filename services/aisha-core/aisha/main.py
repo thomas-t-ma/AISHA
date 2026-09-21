@@ -8,12 +8,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from aisha.api.routes import router
+from aisha.api.voice import router as voice_router
 from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.providers.base import AISHAProviderError
 from aisha.providers.registry import build_llm_provider
 from aisha.settings import Settings
 from aisha.storage.database import AISHAStore
+from aisha.voice.service import VoiceService
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,12 @@ async def lifespan(app: FastAPI):
             warmup_metrics = {"preloaded": False, "error": str(exc)}
 
     orchestrator = AISHAOrchestrator(store, persona, provider)
+    voice = VoiceService(
+        stt_provider=profile.stt.get("provider", "disabled"),
+        stt_model=profile.stt.get("model", "mlx-community/whisper-small-mlx"),
+        tts_provider=profile.tts.get("provider", "disabled"),
+        tts_voice=profile.tts.get("voice", "af_heart"),
+    )
 
     app.state.aisha = {
         "settings": settings,
@@ -54,6 +62,7 @@ async def lifespan(app: FastAPI):
         "store": store,
         "provider": provider,
         "orchestrator": orchestrator,
+        "voice": voice,
         "warmup_metrics": warmup_metrics,
     }
     yield
@@ -61,6 +70,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AISHA Core", version="0.2.0", lifespan=lifespan)
 app.include_router(router)
+app.include_router(voice_router)
 
 
 @app.websocket("/v1/ws/{session_id}")

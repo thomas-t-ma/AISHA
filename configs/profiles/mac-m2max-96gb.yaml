@@ -14,11 +14,11 @@ llm:
   options:
     num_ctx: 32768
 stt:
-  provider: disabled
-  planned_provider: mlx-whisper
+  provider: mlx-whisper
+  model: mlx-community/whisper-small-mlx
 tts:
-  provider: disabled
-  planned_provider: kokoro-local
+  provider: kokoro-local
+  voice: af_heart
 vision:
   provider: disabled
 notes: >-

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { createSession, getEvents, getHealth, getMessages, getRuns } from './api';
+import VoiceControls from './VoiceControls';
 import type { AISHAEvent, ChatMessage, ModelRun, RuntimeHealth, TurnLatency } from './types';
 
 const SESSION_KEY = 'aisha.studio.session.v1';
@@ -290,6 +291,9 @@ export default function App() {
   }
 
   const currentRun = runs.find((run) => run.run_id === selectedRunId) ?? runs.at(-1);
+  const latestReply = messages.filter((message) =>
+    message.role === 'assistant' && message.status === 'committed',
+  ).at(-1)?.text ?? '';
   const statusText = connection === 'online' ? 'Connected' : connection === 'connecting'
     ? 'Connecting' : 'Disconnected';
 
@@ -414,7 +418,14 @@ export default function App() {
               )}
             </div>
           </form>
-          <div className="composer-disclaimer">Development build · AISHA has no camera or microphone access yet.</div>
+          <VoiceControls
+            latestReply={latestReply}
+            busy={busy}
+            connected={connection === 'online'}
+            onTranscript={(text) => setDraft((previous) =>
+              previous.trim() ? previous.trim() + ' ' + text : text)}
+          />
+          <div className="composer-disclaimer">Local microphone and voice models are optional. Recordings are not saved.</div>
         </div>
       </main>
 
