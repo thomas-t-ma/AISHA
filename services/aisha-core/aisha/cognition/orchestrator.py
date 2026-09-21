@@ -76,7 +76,7 @@ class AISHAOrchestrator:
             )
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - keep optional reflection isolated
             # An unavailable local reflection model must not break chat.
             self._last_reflection_error = f"{type(exc).__name__}: {exc}"
             logger.warning("AISHA memory reflection failed: %s", self._last_reflection_error)
