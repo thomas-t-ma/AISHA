@@ -288,3 +288,220 @@ def test_reflector_discourages_composite_legacy_revisions():
 
     assert "patient_contact_at_current_job" in REFLECTION_SYSTEM
     assert "Never revise a composite biography" in REFLECTION_SYSTEM
+
+
+class RetryCompositeReflector:
+    def __init__(self, replacement: dict | None) -> None:
+        self.replacement = replacement
+        self.calls = 0
+
+    async def reflect(self, user_text: str, existing: list[dict]) -> list[dict]:
+        prior = next(b for b in existing if b["topic_key"] == "current_employment")
+        return [{
+            "action": "revise",
+            "target_belief_id": prior["belief_id"],
+            "topic_key": "current_employment",
+            "text": "The user works at Emory, has another job at Morehouse, "
+                    "and has little patient contact at the current job.",
+            "epistemic_status": "stated",
+            "source_quote": "My current job doesn't offer much patient contact.",
+            "open_question": None,
+        }]
+
+    async def reformulate_as_atomic_add(
+        self, user_text: str, rejected: dict, existing: list[dict]
+    ) -> dict | None:
+        self.calls += 1
+        return self.replacement
+
+
+class SelectiveChecker:
+    def __init__(self) -> None:
+        self.checked: list[dict] = []
+
+    async def check(self, action: dict) -> tuple[bool, str]:
+        self.checked.append(action)
+        if action["action"] == "revise":
+            return False, "evidence_does_not_support_whole_claim"
+        if action["text"] == "The user's current job offers limited patient contact.":
+            return True, "supported"
+        return False, "evidence_does_not_support_whole_claim"
+
+
+async def old_employment_episode(store: AISHAStore, ledger: ExperienceLedger) -> dict:
+    episode = await ledger.record_episode(
+        session_id="older_session",
+        turn_id="older_turn",
+        user_message_id="older_user",
+        assistant_message_id="older_assistant",
+        user_text="I currently work at Emory in research.",
+        assistant_text="Okay.",
+    )
+    saved = await ledger.apply(episode=episode, action={
+        "action": "add",
+        "target_belief_id": None,
+        "topic_key": "current_employment",
+        "text": "The user currently works in research at Emory.",
+        "epistemic_status": "stated",
+        "source_quote": "I currently work at Emory in research.",
+        "open_question": None,
+    })
+    assert saved is not None
+    return saved
+
+
+@pytest.mark.asyncio
+async def test_failed_composite_revision_recovers_new_evidence_checked_atomic_belief(tmp_path):
+    store = AISHAStore(tmp_path / "memory.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    original = await old_employment_episode(store, ledger)
+    candidate = {
+        "action": "add",
+        "target_belief_id": None,
+        "topic_key": "patient_contact_at_current_job",
+        "text": "The user's current job offers limited patient contact.",
+        "epistemic_status": "stated",
+        "source_quote": "My current job doesn't offer much patient contact.",
+        "open_question": None,
+    }
+    reflector = RetryCompositeReflector(candidate)
+    checker = SelectiveChecker()
+    orch = AISHAOrchestrator(
+        store, load_persona(Settings(aisha_profile="mock").character_dir),
+        ChatProbe(), ledger=ledger, reflector=reflector,
+        evidence_verifier=checker,
+    )
+    session = await store.create_session()
+    _ = [event async for event in orch.stream_user_turn(
+        session, "My current job doesn’t offer much patient contact."
+    )]
+    await orch.wait_for_reflections()
+    beliefs = {b["topic_key"]: b for b in await ledger.list_beliefs()}
+    assert set(beliefs) == {"current_employment", "patient_contact_at_current_job"}
+    assert beliefs["current_employment"]["belief_id"] == original["belief_id"]
+    assert beliefs["current_employment"]["revision"] == 1
+    assert beliefs["current_employment"]["evidence_status"] == "legacy_unchecked"
+    assert beliefs["patient_contact_at_current_job"]["revision"] == 1
+    assert beliefs["patient_contact_at_current_job"]["evidence_status"] == "verified"
+    assert beliefs["patient_contact_at_current_job"]["source_quote"] == (
+        "My current job doesn’t offer much patient contact."
+    )
+    assert reflector.calls == 1
+    assert len(checker.checked) == 2
+    assert checker.checked[-1]["source_quote"] == (
+        "My current job doesn’t offer much patient contact."
+    )
+    result = orch.memory_status()["last_result"]
+    assert result["outcome"] == "stored"
+    assert (result["proposed"], result["saved"], result["rejected"]) == (1, 1, 1)
+    assert result["recovered"] == 1
+    assert result["rejections"][0]["reason"] == (
+        "evidence_does_not_support_whole_claim"
+    )
+    assert result["repairs"][0]["outcome"] == "stored"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("replacement", [
+    {
+        "action": "revise",
+        "target_belief_id": "bogus",
+        "topic_key": "current_employment",
+        "text": "The user's current job offers limited patient contact.",
+        "epistemic_status": "stated",
+        "source_quote": "My current job doesn't offer much patient contact.",
+        "open_question": None,
+    },
+    {
+        "action": "add",
+        "target_belief_id": None,
+        "topic_key": "patient_contact_at_current_job",
+        "text": "The user's current job offers limited patient contact.",
+        "epistemic_status": "stated",
+        "source_quote": "The user moved to another country.",
+        "open_question": None,
+    },
+    None,
+])
+async def test_atomic_retry_cannot_force_unsupported_or_non_add_memory(
+    tmp_path, replacement
+):
+    store = AISHAStore(tmp_path / "memory.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    original = await old_employment_episode(store, ledger)
+    reflector = RetryCompositeReflector(replacement)
+    checker = SelectiveChecker()
+    orch = AISHAOrchestrator(
+        store, load_persona(Settings(aisha_profile="mock").character_dir),
+        ChatProbe(), ledger=ledger, reflector=reflector,
+        evidence_verifier=checker,
+    )
+    session = await store.create_session()
+    _ = [event async for event in orch.stream_user_turn(
+        session, "My current job doesn't offer much patient contact."
+    )]
+    await orch.wait_for_reflections()
+    beliefs = await ledger.list_beliefs()
+    assert len(beliefs) == 1
+    assert beliefs[0]["belief_id"] == original["belief_id"]
+    assert beliefs[0]["revision"] == 1
+    assert reflector.calls == 1
+    assert orch.memory_status()["last_result"]["recovered"] == 0
+
+
+@pytest.mark.asyncio
+async def test_local_reflector_atomic_retry_requests_new_add_without_format(
+    monkeypatch
+):
+    from aisha.memory.reflector import OllamaReflector
+
+    responses = []
+    atomic = {
+        "action": "add",
+        "target_belief_id": None,
+        "topic_key": "patient_contact_at_current_job",
+        "text": "The user's current job offers limited patient contact.",
+        "epistemic_status": "stated",
+        "source_quote": "My current job doesn't offer much patient contact.",
+        "open_question": None,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        request_json = json.loads(request.content)
+        responses.append(request_json)
+        if "format" in request_json:
+            return httpx.Response(501)
+        return httpx.Response(
+            200, json={"message": {"content": json.dumps({"memory": atomic})}}
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient",
+        lambda *args, **kwargs: client(*args, transport=transport, **kwargs),
+    )
+    reflector = OllamaReflector("qwen3.5:35b-mlx", "http://127.0.0.1:11434")
+    original = {
+        "action": "revise",
+        "topic_key": "current_employment",
+        "source_quote": "My current job doesn't offer much patient contact.",
+    }
+    existing = [{"topic_key": "current_employment"}]
+    recovered = await reflector.reformulate_as_atomic_add(
+        original["source_quote"], original, existing
+    )
+    assert recovered == atomic
+    assert len(responses) == 1
+    assert "format" not in responses[0]
+    assert responses[0]["think"] is False
+    assert "current_employment" in responses[0]["messages"][1]["content"]
+
+    atomic["topic_key"] = "current_employment"
+    assert await reflector.reformulate_as_atomic_add(
+        original["source_quote"], original, existing
+    ) is None

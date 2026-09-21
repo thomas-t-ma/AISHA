@@ -231,3 +231,18 @@ failed reflections are not replayed or backfilled automatically.
 The extraction prompt also distinguishes new, narrow facts (e.g. patient
 contact at the current job) from wholesale revisions of a legacy composite
 biography. The legacy entry itself is preserved, still marked unchecked.
+
+### Bounded recovery from composite revision rejection
+
+If the reflection model proposes a revision that a separate evidence checker
+rejects because the current quote does not support the whole replacement claim,
+Core attempts **one** atomic reformulation as a **new** topic. It is never an
+automatic rewrite of the original belief. The retry may return no candidate,
+and its new text, original-source substring, fresh topic key, and evidence
+status are checked again before writing.
+
+Studio retains the original rejection alongside a separate recovery outcome
+(stored, rejected, no candidate, or failed). A recovered belief is counted as
+saved, while the original rejected proposal remains counted as rejected.
+This does not backfill previously failed reflections or guarantee that the
+local model will always find a useful independent memory.

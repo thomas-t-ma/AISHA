@@ -143,3 +143,83 @@ class OllamaReflector:
         if not isinstance(parsed, dict) or not isinstance(parsed.get("memories"), list):
             raise TypeError("Memory reflection returned an invalid memory structure")
         return [item for item in parsed["memories"][:3] if isinstance(item, dict)]
+
+    async def reformulate_as_atomic_add(
+        self, user_text: str, rejected: dict, existing: list[dict]
+    ) -> dict | None:
+        """One bounded retry for a composite revision; never a forced write."""
+        quote = rejected.get("source_quote")
+        if not isinstance(quote, str) or not quote.strip():
+            return None
+
+        forbidden_keys = [
+            belief["topic_key"] for belief in existing[:25]
+            if isinstance(belief.get("topic_key"), str)
+        ]
+        prompt = """A proposed memory was rejected because the quoted USER sentence
+did not support the WHOLE replacement of an existing biography.
+Try to recover at most ONE smaller, independent observation from the quote.
+
+Return ONLY JSON, either {"memory":null} or
+{"memory":{"action":"add","target_belief_id":null,
+"topic_key":"specific_new_slug","text":"one atomic third-person claim",
+"epistemic_status":"stated"|"inferred"|"uncertain",
+"source_quote":"verbatim substring","open_question":null}}.
+
+Rules:
+- Only the current USER quote is evidence. Ignore unsourced clauses from
+  the rejected composite. Do not combine previous beliefs into the new claim.
+- ALWAYS use action add, target_belief_id null and a NEW specific topic_key.
+- The forbidden topic keys cannot be reused; do not rename a duplicate fact.
+- Preserve uncertainty and distinguish plans from completed outcomes.
+- If no independent, meaningful, narrow claim exists, return memory null.
+- Never invent personal names, institutions, decisions, or circumstances.
+"""
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "stream": False,
+            "think": False,
+            "options": {"temperature": 0.1, "num_predict": 350, "num_ctx": 4096},
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": json.dumps({
+                    "latest_user_message": user_text[:6000],
+                    "source_quote": quote,
+                    "rejected_topic_key": rejected.get("topic_key"),
+                    "forbidden_topic_keys": forbidden_keys,
+                }, ensure_ascii=False)},
+            ],
+        }
+        if self.keep_alive is not None:
+            payload["keep_alive"] = self.keep_alive
+        async with httpx.AsyncClient(timeout=75.0) as client:
+            response = await client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        raw = data.get("message", {}).get("content", "")
+        if not isinstance(raw, str):
+            return None
+        raw = raw.strip()
+        fence = chr(96) * 3
+        if raw.startswith(fence) and raw.endswith(fence):
+            lines = raw.splitlines()
+            if len(lines) >= 3 and lines[0].lower() in {fence, fence + "json"}:
+                raw = "\n".join(lines[1:-1]).strip()
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError):
+            logger.warning("Atomic memory retry returned invalid JSON; discarded")
+            return None
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("memory"), dict):
+            return None
+        item = parsed["memory"]
+        key = item.get("topic_key")
+        if (
+            item.get("action") != "add"
+            or item.get("target_belief_id") is not None
+            or not isinstance(key, str)
+            or key.strip().lower() in {name.strip().lower() for name in forbidden_keys}
+        ):
+            return None
+        return item

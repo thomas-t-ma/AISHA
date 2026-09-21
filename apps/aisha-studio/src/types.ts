@@ -65,7 +65,7 @@ export interface AutomaticMemoryStatus {
   enabled: boolean;
   active_reflections: number;
   last_error: string | null;
-  last_result: { episode_id: string; proposed: number; saved: number; rejected: number; rejections?: { reason: string; action: string; topic_key: string; source_quote: string }[]; outcome: 'stored' | 'rejected' | 'no_candidate' | 'failed' } | null;
+  last_result: { episode_id: string; proposed: number; saved: number; rejected: number; recovered?: number; repairs?: { original_topic: string; outcome: 'stored' | 'rejected' | 'failed' | 'no_candidate'; reason?: string; topic_key?: string }[]; rejections?: { reason: string; action: string; topic_key: string; source_quote: string }[]; outcome: 'stored' | 'rejected' | 'no_candidate' | 'failed' } | null;
 }
 
 export interface LearnedBelief {

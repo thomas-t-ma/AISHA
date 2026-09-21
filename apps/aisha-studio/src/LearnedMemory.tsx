@@ -111,6 +111,17 @@ export default function LearnedMemory() {
           )}
         </div>
       ))}
+      {status?.last_result?.repairs?.map((repair, index) => (
+        <p className="learned-help" key={status.last_result?.episode_id + ':repair:' + index}>
+          Atomic recovery from {repair.original_topic || 'rejected revision'}:
+          {' '}{repair.outcome.replace('_', ' ')}
+          {repair.topic_key ? ' · ' + repair.topic_key : ''}
+          {repair.reason ? ' · ' + repair.reason.replaceAll('_', ' ') : ''}
+          {repair.outcome === 'stored'
+            ? ' · Original revision was rejected; a separate evidence-checked memory was saved.'
+            : ''}
+        </p>
+      ))}
       {status?.last_error && (
         <p className="memory-error">Last reflection error: {status.last_error}</p>
       )}

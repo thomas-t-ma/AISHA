@@ -71,7 +71,9 @@ class AISHAOrchestrator:
             proposals = await self.reflector.reflect(episode["user_text"], beliefs)
             applied = 0
             rejected = 0
+            recovered = 0
             rejections: list[dict] = []
+            repairs: list[dict] = []
             for proposal in proposals[:3]:
                 # Models often straighten typographic apostrophes. Recover the
                 # ORIGINAL span of the recorded user message, never a paraphrase.
@@ -102,11 +104,90 @@ class AISHAOrchestrator:
                         "topic_key": str(proposal.get("topic_key", ""))[:80],
                         "source_quote": str(proposal.get("source_quote", ""))[:180],
                     })
+                    # Do not silently discard a useful atomic observation just
+                    # because the model tried to append it to a whole biography.
+                    # One separate proposal may be made, but never forced in.
+                    repair = getattr(self.reflector, "reformulate_as_atomic_add", None)
+                    if (
+                        reason == "evidence_does_not_support_whole_claim"
+                        and proposal.get("action") == "revise"
+                        and self.evidence_verifier is not None
+                        and callable(repair)
+                    ):
+                        repair_result = {
+                            "original_topic": str(proposal.get("topic_key", ""))[:80],
+                            "outcome": "no_candidate",
+                        }
+                        try:
+                            candidate = await repair(
+                                episode["user_text"], proposal, beliefs
+                            )
+                            if candidate is not None:
+                                # Validate the one retry independently. It must
+                                # ADD a new topic, not mutate the rejected belief.
+                                key = candidate.get("topic_key")
+                                if (
+                                    candidate.get("action") != "add"
+                                    or candidate.get("target_belief_id") is not None
+                                    or not isinstance(key, str)
+                                    or not key.strip()
+                                    or key.strip().lower() in {
+                                        str(b["topic_key"]).strip().lower()
+                                        for b in beliefs
+                                    }
+                                ):
+                                    repair_reason = "repair_requires_distinct_new_topic"
+                                    repaired_belief = None
+                                else:
+                                    source = original_source_quote(
+                                        str(proposal.get("source_quote", "")),
+                                        candidate.get("source_quote"),
+                                    )
+                                    if source is None:
+                                        repair_reason = "repair_quote_outside_original_source"
+                                        repaired_belief = None
+                                    else:
+                                        candidate = {**candidate, "source_quote": source}
+                                        supported, repair_reason = (
+                                            await self.evidence_verifier.check(candidate)
+                                        )
+                                        if supported:
+                                            repaired_belief, repair_reason = (
+                                                await self.ledger.apply_with_reason(
+                                                    episode=episode,
+                                                    action=candidate,
+                                                    evidence_checked=True,
+                                                )
+                                            )
+                                        else:
+                                            repaired_belief = None
+                                if repaired_belief is not None:
+                                    applied += 1
+                                    recovered += 1
+                                    repair_result["outcome"] = "stored"
+                                else:
+                                    repair_result["outcome"] = "rejected"
+                                repair_result["reason"] = repair_reason
+                                repair_result["topic_key"] = str(
+                                    candidate.get("topic_key", "")
+                                )[:80]
+                        except Exception as repair_exc:  # noqa: BLE001 - optional repair
+                            # A retry failure cannot invalidate the chat or
+                            # the original, already recorded rejection.
+                            logger.warning(
+                                "Memory repair failed: %s",
+                                type(repair_exc).__name__,
+                            )
+                            repair_result["outcome"] = "failed"
+                            repair_result["reason"] = type(repair_exc).__name__
+                        repairs.append(repair_result)
             result = {
                 "episode_id": episode["episode_id"],
                 "proposed": len(proposals[:3]),
                 "saved": applied,
                 "rejected": rejected,
+                "recovered": recovered,
+                "repairs": repairs,
                 "rejections": rejections,
                 "outcome": (
                     "stored" if applied
@@ -129,7 +210,8 @@ class AISHAOrchestrator:
             self._last_reflection_error = f"{type(exc).__name__}: {exc}"
             self._last_reflection_result = {
                 "episode_id": episode["episode_id"], "outcome": "failed",
-                "proposed": 0, "saved": 0, "rejected": 0, "rejections": [],
+                "proposed": 0, "saved": 0, "rejected": 0, "recovered": 0,
+                "repairs": [], "rejections": [],
             }
             logger.warning("AISHA memory reflection failed: %s", self._last_reflection_error)
             await self._persisted_event(
