@@ -1,4 +1,4 @@
-import type { AISHAEvent, MemoryRecord, ModelRun, RuntimeHealth, StoredMessage } from './types';
+import type { AISHAEvent, AutomaticMemoryStatus, BeliefVersion, LearnedBelief, MemoryRecord, ModelRun, RuntimeHealth, StoredMessage } from './types';
 
 async function json<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -54,4 +54,23 @@ export async function removeMemory(memoryId: string): Promise<void> {
     method: 'DELETE',
   });
   if (!response.ok) throw new Error('Cannot remove memory: HTTP ' + response.status);
+}
+
+export function getLearnedBeliefs(): Promise<LearnedBelief[]> {
+  return json<LearnedBelief[]>('/v1/memory/beliefs');
+}
+
+export function getBeliefVersions(id: string): Promise<BeliefVersion[]> {
+  return json<BeliefVersion[]>('/v1/memory/beliefs/' + encodeURIComponent(id) + '/versions');
+}
+
+export function getAutomaticMemoryStatus(): Promise<AutomaticMemoryStatus> {
+  return json<AutomaticMemoryStatus>('/v1/memory/status');
+}
+
+export async function forgetLearnedBelief(id: string): Promise<void> {
+  const response = await fetch('/v1/memory/beliefs/' + encodeURIComponent(id), {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error('Could not forget learned belief: HTTP ' + response.status);
 }

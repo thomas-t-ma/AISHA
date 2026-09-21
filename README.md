@@ -170,3 +170,25 @@ To try: open Memory in Studio, add a harmless fact such as a preferred nickname,
 start **New conversation**, and ask AISHA what you explicitly asked her to
 remember. Edit/remove that entry and ask again in another new session.
 Voice work remains isolated on `feature/voice-v1` until you have a microphone.
+
+## Autonomous memory v1 (experimental)
+
+Voice is still on a separate branch; this branch builds on the text-only Studio.
+When Ollama is configured, Core records a **completed** conversation turn as an
+episode and starts a separate local-model reflection after sending the completed
+turn event. Reflections are best-effort, limited to two memories per turn; short
+greetings should be ignored. They may finish after you see AISHA's answer.
+
+Each learned belief includes a source quote from the *actual user message*,
+source session/turn, status (stated, inferred, uncertain), and a revision history.
+New evidence can revise a belief; AISHA's own prior output is not evidence.
+In the Studio Memory panel, click Refresh to inspect newly formed beliefs and
+their source quotes. You can forget a learned belief; original transcripts are
+not erased. Manual notes continue working.
+
+Set `AISHA_AUTO_MEMORY=false` in Core's `.env` if you need to disable new
+autonomous reflection without deleting existing memories. The mock profile
+does not launch a reflection model, so CI remains offline. The first revision
+uses recent beliefs (not semantic/vector retrieval), and model classifications
+are *fallible*: inspect the source and revisions before trusting conclusions.
+Reflections may be interrupted if Core shuts down immediately after a reply.

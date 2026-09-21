@@ -54,6 +54,7 @@ async def health(request: Request):
         "persona_version": state["persona"].version,
         "data_dir": str(state["settings"].data_dir),
         "warmup": state.get("warmup_metrics", {}),
+        "auto_memory": state["orchestrator"].memory_status(),
     }
 
 
@@ -128,3 +129,31 @@ async def session_model_runs(
     limit: int = Query(default=100, ge=1, le=1000),
 ):
     return await request.app.state.aisha["store"].session_model_runs(session_id, limit=limit)
+
+@router.get("/memory/status")
+async def automatic_memory_status(request: Request):
+    return request.app.state.aisha["orchestrator"].memory_status()
+
+
+@router.get("/memory/episodes")
+async def memory_episodes(request: Request, limit: int = Query(default=30, ge=1, le=100)):
+    return await request.app.state.aisha["ledger"].list_episodes(limit=limit)
+
+
+@router.get("/memory/beliefs")
+async def memory_beliefs(request: Request, limit: int = Query(default=30, ge=1, le=200)):
+    return await request.app.state.aisha["ledger"].list_beliefs(limit=limit)
+
+
+@router.get("/memory/beliefs/{belief_id}/versions")
+async def memory_belief_versions(request: Request, belief_id: str):
+    return await request.app.state.aisha["ledger"].versions(belief_id)
+
+
+@router.delete("/memory/beliefs/{belief_id}", status_code=204)
+async def forget_automatic_belief(request: Request, belief_id: str):
+    _check_local_origin(request)
+    removed = await request.app.state.aisha["ledger"].forget_belief(belief_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Belief not found")
+    return Response(status_code=204)
