@@ -6,7 +6,6 @@ from uuid import uuid4
 
 from aisha.storage.database import AISHAStore
 
-
 MEMORY_SCHEMA = """
 CREATE TABLE IF NOT EXISTS auto_episodes (
     episode_id TEXT PRIMARY KEY,
