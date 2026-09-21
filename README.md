@@ -84,6 +84,38 @@ source .venv/bin/activate
 python scripts/chat.py
 ```
 
+## AISHA Studio (Milestone 2)
+
+Start Core in one terminal, with `AISHA_PROFILE=mac-m2max-96gb` set in
+`services/aisha-core/.env`:
+
+```bash
+cd services/aisha-core
+source .venv/bin/activate
+python -m uvicorn aisha.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Then, from the repository root, start the local React/TypeScript Studio:
+
+```bash
+cd apps/aisha-studio
+npm install
+npm run dev
+```
+
+Open `http://127.0.0.1:5173`. Use Node.js 20.19+ or 22.12+.
+Vite proxies `/v1` (including WebSockets) to local Core, so neither service
+needs a public port, cloud account, API key, or permissive CORS.
+
+Studio includes streaming chat, new/resumable local sessions, cancellation,
+model/profile and health displays, per-turn TTFT/total latency, model runs
+and a developer event inspector. Only committed messages are loaded after
+a page refresh. A browser stores the session ID locally; AISHA's SQLite
+database remains the source of truth.
+
+This is a development UI; keep both servers on `127.0.0.1`. Authentication,
+LAN access, audio and avatar rendering are not included yet.
+
 ## Moving between machines
 
 GitHub is the source of truth for AISHA code.

@@ -144,6 +144,28 @@ class AISHAStore:
             for row in rows
         ]
 
+    async def session_messages(self, session_id: str, limit: int = 200) -> list[dict]:
+        """Return committed messages in chronological order for Studio recovery."""
+        safe_limit = max(1, min(limit, 500))
+
+        def work() -> list[sqlite3.Row]:
+            with self._connect() as db:
+                return list(
+                    db.execute(
+                        """
+                        SELECT message_id, role, text, status, created_at
+                        FROM messages
+                        WHERE session_id = ? AND status = 'committed'
+                        ORDER BY created_at DESC, rowid DESC
+                        LIMIT ?
+                        """,
+                        (session_id, safe_limit),
+                    ).fetchall()
+                )
+
+        rows = await asyncio.to_thread(work)
+        return [dict(row) for row in reversed(rows)]
+
     async def start_model_run(
         self,
         session_id: str,

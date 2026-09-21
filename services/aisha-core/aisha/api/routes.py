@@ -43,6 +43,15 @@ async def cancel_turn(session_id: str, request: Request, turn_id: str | None = N
     return CancelResponse(cancelled_turn_id=cancelled)
 
 
+@router.get("/sessions/{session_id}/messages")
+async def session_messages(
+    session_id: str,
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=500),
+):
+    return await request.app.state.aisha["store"].session_messages(session_id, limit=limit)
+
+
 @router.get("/sessions/{session_id}/events")
 async def session_events(
     session_id: str,
