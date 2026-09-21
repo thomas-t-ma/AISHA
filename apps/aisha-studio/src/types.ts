@@ -65,7 +65,7 @@ export interface AutomaticMemoryStatus {
   enabled: boolean;
   active_reflections: number;
   last_error: string | null;
-  last_result: { episode_id: string; proposed: number; saved: number; rejected: number; rejections?: { reason: string; action: string; topic_key: string; source_quote: string }[]; outcome: 'stored' | 'rejected' | 'no_candidate' | 'failed' } | null;
+  last_result: { episode_id: string; proposed: number; saved: number; rejected: number; recovered?: number; repairs?: { original_topic: string; outcome: 'stored' | 'rejected' | 'failed' | 'no_candidate'; reason?: string; topic_key?: string }[]; rejections?: { reason: string; action: string; topic_key: string; source_quote: string }[]; outcome: 'stored' | 'rejected' | 'no_candidate' | 'failed' } | null;
 }
 
 export interface LearnedBelief {
@@ -73,6 +73,7 @@ export interface LearnedBelief {
   topic_key: string;
   text: string;
   epistemic_status: 'stated' | 'inferred' | 'uncertain';
+  evidence_status: 'verified' | 'legacy_unchecked';
   source_quote: string;
   source_session_id: string;
   source_turn_id: string;
@@ -87,6 +88,7 @@ export interface BeliefVersion {
   revision: number;
   text: string;
   epistemic_status: string;
+  evidence_status: 'verified' | 'legacy_unchecked';
   source_quote: string;
   source_session_id: string;
   source_turn_id: string;

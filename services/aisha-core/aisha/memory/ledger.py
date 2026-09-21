@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS auto_beliefs (
     topic_key TEXT NOT NULL UNIQUE,
     text TEXT NOT NULL,
     epistemic_status TEXT NOT NULL,
+    evidence_status TEXT NOT NULL DEFAULT 'legacy_unchecked',
     source_quote TEXT NOT NULL,
     source_session_id TEXT NOT NULL,
     source_turn_id TEXT NOT NULL,
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS auto_belief_versions (
     revision INTEGER NOT NULL,
     text TEXT NOT NULL,
     epistemic_status TEXT NOT NULL,
+    evidence_status TEXT NOT NULL DEFAULT 'legacy_unchecked',
     source_quote TEXT NOT NULL,
     source_session_id TEXT NOT NULL,
     source_turn_id TEXT NOT NULL,
@@ -69,6 +71,15 @@ class ExperienceLedger:
     def _initialize_sync(self) -> None:
         with self.store._connect() as db:
             db.executescript(MEMORY_SCHEMA)
+            for table in ("auto_beliefs", "auto_belief_versions"):
+                columns = {row["name"] for row in db.execute(
+                    f"PRAGMA table_info({table})"
+                ).fetchall()}
+                if "evidence_status" not in columns:
+                    db.execute(
+                        f"ALTER TABLE {table} ADD COLUMN evidence_status "
+                        "TEXT NOT NULL DEFAULT 'legacy_unchecked'"
+                    )
 
     async def record_episode(
         self,
@@ -172,6 +183,7 @@ class ExperienceLedger:
         *,
         episode: dict,
         action: dict,
+        evidence_checked: bool = False,
     ) -> tuple[dict | None, str]:
         """Atomically apply or return a stable, non-sensitive rejection reason."""
         quote = action.get("source_quote", "")
@@ -207,6 +219,7 @@ class ExperienceLedger:
         now = datetime.now(UTC).isoformat()
         clean_key = topic_key.strip().lower()
         question = question.strip() if question else None
+        evidence_status = "verified" if evidence_checked else "legacy_unchecked"
 
         def work() -> tuple[dict | None, str]:
             with self.store._connect() as db:
@@ -219,12 +232,12 @@ class ExperienceLedger:
                     revision = 1
                     db.execute(
                         """INSERT INTO auto_beliefs (
-                        belief_id, topic_key, text, epistemic_status, source_quote,
-                        source_session_id, source_turn_id, source_episode_id,
+                        belief_id, topic_key, text, epistemic_status, evidence_status,
+                        source_quote, source_session_id, source_turn_id, source_episode_id,
                         open_question, revision, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
-                            belief_id, clean_key, text.strip(), status, quote,
+                            belief_id, clean_key, text.strip(), status, evidence_status, quote,
                             episode["session_id"], episode["turn_id"],
                             episode["episode_id"], question, revision, now, now,
                         ),
@@ -242,12 +255,13 @@ class ExperienceLedger:
                     revision = row["revision"] + 1
                     db.execute(
                         """UPDATE auto_beliefs SET
-                        text = ?, epistemic_status = ?, source_quote = ?,
+                        text = ?, epistemic_status = ?, evidence_status = ?,
+                        source_quote = ?,
                         source_session_id = ?, source_turn_id = ?, source_episode_id = ?,
                         open_question = ?, revision = ?, updated_at = ?
                         WHERE belief_id = ?""",
                         (
-                            text.strip(), status, quote, episode["session_id"],
+                            text.strip(), status, evidence_status, quote, episode["session_id"],
                             episode["turn_id"], episode["episode_id"],
                             question, revision, now, belief_id,
                         ),
@@ -256,12 +270,12 @@ class ExperienceLedger:
                 db.execute(
                     """INSERT INTO auto_belief_versions (
                     version_id, belief_id, revision, text, epistemic_status,
-                    source_quote, source_session_id, source_turn_id,
+                    evidence_status, source_quote, source_session_id, source_turn_id,
                     source_episode_id, open_question, recorded_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         f"version_{uuid4().hex}", belief_id, revision, text.strip(),
-                        status, quote, episode["session_id"], episode["turn_id"],
+                        status, evidence_status, quote, episode["session_id"], episode["turn_id"],
                         episode["episode_id"], question, now,
                     ),
                 )

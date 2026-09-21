@@ -111,6 +111,17 @@ export default function LearnedMemory() {
           )}
         </div>
       ))}
+      {status?.last_result?.repairs?.map((repair, index) => (
+        <p className="learned-help" key={status.last_result?.episode_id + ':repair:' + index}>
+          Atomic recovery from {repair.original_topic || 'rejected revision'}:
+          {' '}{repair.outcome.replace('_', ' ')}
+          {repair.topic_key ? ' · ' + repair.topic_key : ''}
+          {repair.reason ? ' · ' + repair.reason.replaceAll('_', ' ') : ''}
+          {repair.outcome === 'stored'
+            ? ' · Original revision was rejected; a separate evidence-checked memory was saved.'
+            : ''}
+        </p>
+      ))}
       {status?.last_error && (
         <p className="memory-error">Last reflection error: {status.last_error}</p>
       )}
@@ -129,12 +140,23 @@ export default function LearnedMemory() {
           <p className="memory-text">{belief.text}</p>
           <div className="memory-actions">
             <span className="learned-badge">{belief.epistemic_status}</span>
+            <span className="learned-badge">
+              {belief.evidence_status === 'verified'
+                ? 'Evidence checked (model-assisted)'
+                : 'Legacy: evidence not checked'}
+            </span>
           </div>
           <div className="learned-quote">
             {belief.revision > 1 ? "New evidence for this revision" : "Source quote"}: “{belief.source_quote}”
           </div>
           {belief.open_question && (
             <div className="learned-question">Open question: {belief.open_question}</div>
+          )}
+          {belief.evidence_status !== 'verified' && (
+            <p className="learned-help">
+              Created before the evidence checker; the quote may not support the
+              whole memory. This entry has not been rewritten or deleted.
+            </p>
           )}
           {belief.revision > 1 && <p className="learned-help">
             This quote supports the latest change. Earlier claims may rely on the
@@ -159,7 +181,9 @@ export default function LearnedMemory() {
               {(versions[belief.belief_id] ?? []).map((version) => (
                 <div key={version.version_id}>
                   <strong>Version {version.revision}: </strong>{version.text}
-                  <p>Evidence: “{version.source_quote}”</p>
+                  <p>Evidence: “{version.source_quote}” ·
+                    {' '}{version.evidence_status === 'verified'
+                      ? 'checked' : 'legacy unchecked'}</p>
                 </div>
               ))}
             </div>

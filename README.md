@@ -192,3 +192,57 @@ does not launch a reflection model, so CI remains offline. The first revision
 uses recent beliefs (not semantic/vector retrieval), and model classifications
 are *fallible*: inspect the source and revisions before trusting conclusions.
 Reflections may be interrupted if Core shuts down immediately after a reply.
+
+## Memory integrity gate (experimental)
+
+Automatically proposed beliefs now receive a separate, local-model evidence check
+**before** AISHA writes them to SQLite. The checker assesses the entire proposed
+claim against the exact quote from the current user message; a partial match
+is not enough. The reflector and verifier both use the configured Ollama model
+without Ollama's MLX-incompatible structured-output `format` option. Both run
+*after* the visible answer; a failed check does not interrupt chat.
+
+A checked belief/version is labeled `verified` in storage and
+**Evidence checked (model-assisted)** in Studio. This means a separate LLM
+judged the new claim consistent with that quote—not a mathematical guarantee of
+truth. Evidence checks may reject good claims as well as bad ones; consult the
+existing per-reflection rejection reason.
+
+Historical learned beliefs are **preserved**, not silently rewritten. The schema
+labels them `legacy_unchecked`; Studio and the conversation prompt disclose
+that their evidence was not evaluated by this new check. In particular, review
+the older composite `current_employment` example manually rather than assuming
+the new verifier has retroactively fixed it. Existing explicit user-authored
+notes and source episodes are untouched.
+
+Revisions require a new source quote for the full *new* wording. Earlier source
+quotes remain available in Revision history, rather than silently becoming
+proof for arbitrary additional clauses in a replacement belief.
+
+### Quotation punctuation and atomic follow-ups
+
+The reflector may straighten a typographic apostrophe when quoting a user:
+`doesn’t` versus `doesn't`. Core now resolves **only** these one-character
+quotation-punctuation differences against the actual user message, then passes
+the recovered **original exact quote** into the evidence checker and database.
+It does not fuzzy-match words, spelling, case, or changed meaning. Existing
+failed reflections are not replayed or backfilled automatically.
+
+The extraction prompt also distinguishes new, narrow facts (e.g. patient
+contact at the current job) from wholesale revisions of a legacy composite
+biography. The legacy entry itself is preserved, still marked unchecked.
+
+### Bounded recovery from composite revision rejection
+
+If the reflection model proposes a revision that a separate evidence checker
+rejects because the current quote does not support the whole replacement claim,
+Core attempts **one** atomic reformulation as a **new** topic. It is never an
+automatic rewrite of the original belief. The retry may return no candidate,
+and its new text, original-source substring, fresh topic key, and evidence
+status are checked again before writing.
+
+Studio retains the original rejection alongside a separate recovery outcome
+(stored, rejected, no candidate, or failed). A recovered belief is counted as
+saved, while the original rejected proposal remains counted as rejected.
+This does not backfill previously failed reflections or guarantee that the
+local model will always find a useful independent memory.
