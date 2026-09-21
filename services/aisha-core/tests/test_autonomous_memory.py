@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator
+
+import httpx
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +13,7 @@ from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.contracts.turns import TurnContext
 from aisha.main import app
 from aisha.memory.ledger import ExperienceLedger
+from aisha.memory.reflector import OllamaReflector
 from aisha.providers.base import LLMStreamChunk
 from aisha.settings import Settings
 from aisha.storage.database import AISHAStore
@@ -165,3 +169,52 @@ def test_autonomous_memory_api_with_mock_profile(tmp_path, monkeypatch):
         )
         assert other_origin.status_code == 403
         assert client.delete("/v1/memory/beliefs/belief_missing").status_code == 404
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fenced', [False, True])
+async def test_mlx_reflector_never_requests_format_and_accepts_strict_json(
+    monkeypatch, fenced
+):
+    seen_requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        seen_requests.append(payload)
+        # This simulates a backend rejecting an unsupported structured-output
+        # flag, without depending on a locally installed MLX model in CI.
+        if 'format' in payload:
+            return httpx.Response(501, json={'error': 'format not implemented'})
+        content = '{"memories":[]}'
+        if fenced:
+            content = '\x60\x60\x60json\n' + content + '\n\x60\x60\x60'
+        return httpx.Response(200, json={'message': {'content': content}})
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, 'AsyncClient',
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+    reflector = OllamaReflector('qwen3.5:35b-mlx', 'http://127.0.0.1:11434')
+    result = await reflector.reflect('I might switch jobs soon.', [])
+    assert result == []
+    assert len(seen_requests) == 1
+    assert 'format' not in seen_requests[0]
+    assert seen_requests[0]['think'] is False
+
+
+@pytest.mark.asyncio
+async def test_reflector_rejects_unstructured_prose(monkeypatch):
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200, json={'message': {'content': 'I think: {"memories": []}'}}
+        )
+    )
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, 'AsyncClient',
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+    reflector = OllamaReflector('qwen3.5:35b-mlx', 'http://127.0.0.1:11434')
+    with pytest.raises(ValueError, match='did not return JSON'):
+        await reflector.reflect('I might switch jobs soon.', [])

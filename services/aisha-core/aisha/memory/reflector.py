@@ -68,7 +68,6 @@ class OllamaReflector:
             "model": self.model,
             "stream": False,
             "think": False,
-            "format": "json",
             "options": {"temperature": 0.1, "num_predict": 550, "num_ctx": 8192},
             "messages": [
                 {"role": "system", "content": REFLECTION_SYSTEM},
@@ -90,11 +89,23 @@ class OllamaReflector:
             data = response.json()
 
         raw = data.get("message", {}).get("content", "")
+        if not isinstance(raw, str):
+            raise ValueError("Memory reflection returned no text; no beliefs saved")
+        raw = raw.strip()
+
+        # The MLX runner may return a Markdown JSON code fence. Only accept
+        # an entire JSON object or a single fenced JSON object, never an
+        # arbitrary JSON-looking substring embedded in prose.
+        if raw.startswith("```") and raw.endswith("```"):
+            lines = raw.splitlines()
+            if len(lines) >= 3 and lines[0].lower() in {"```", "```json"}:
+                raw = "\n".join(lines[1:-1]).strip()
+
         try:
             parsed = json.loads(raw)
         except (TypeError, ValueError):
             logger.warning("Memory reflection returned invalid JSON; discarded")
-            return []
+            raise ValueError("Memory reflection did not return JSON; no beliefs saved") from None
         if not isinstance(parsed, dict) or not isinstance(parsed.get("memories"), list):
-            return []
+            raise ValueError("Memory reflection returned an invalid memory structure")
         return [item for item in parsed["memories"][:2] if isinstance(item, dict)]
