@@ -51,3 +51,16 @@ export interface TurnLatency {
   firstTokenMs: number | null;
   totalMs: number | null;
 }
+
+export interface VoiceStatus {
+  stt: { provider: string; model: string; ready: boolean; missing: string[] };
+  tts: { provider: string; voice: string; ready: boolean; missing: string[] };
+  max_audio_seconds: number;
+  max_audio_bytes: number;
+  max_speech_text: number;
+}
+
+export interface TranscriptionResult {
+  text: string;
+  transcribe_ms: number;
+}

@@ -149,3 +149,36 @@ A future high-VRAM workstation can use `nvidia-high` or another checked-in profi
 - large checkpoints or Gaussian captures
 
 See `docs/COMPUTE_BACKENDS.md` and `docs/MAC_FIRST_PLAN.md`.
+
+## Local voice (Milestone 3, Mac development)
+
+Voice is opt-in: normal text chat still works with only the Core dependencies.
+For the M2 Max machine, install FFmpeg and espeak-ng through Homebrew, then
+install the optional speech packages **inside the AISHA Core virtualenv**:
+
+```bash
+brew install ffmpeg espeak-ng
+cd services/aisha-core
+source .venv/bin/activate
+python -m pip install -e ".[dev,voice-mac]"
+```
+
+Restart Core and Studio. Open Studio and use the **Record** button in the
+composer; stop recording to transcribe (max 30 seconds / 12 MiB). Review the
+transcript in the ordinary input field before sending. To hear her answer,
+press **Speak** on the completed assistant message. A **Stop audio** control
+interrupts playback locally.
+
+The voice status endpoint is `GET /v1/voice/status`. Speech models are loaded
+lazily on first use, so the first transcription and first spoken answer can be
+slower and may download open weights. MLX Whisper and Kokoro assets are cached
+outside Git. Raw recordings are held in temporary files during transcription
+and are deleted immediately afterward; speech audio is not persisted. The
+accepted upload formats are WebM, MP4, Ogg and WAV. Studio requests microphone
+permission in your browser and records only when the user explicitly clicks
+Record. Neither a cloud API nor a browser speech recognition provider is used.
+
+Current scope is **record → review → send → play reply**; this is not yet
+always-on listening, streamed TTS or real audio barge-in. Keep 127.0.0.1
+development ports private. The optional Mac speech extra should not be used
+on NVIDIA/Windows profiles; those will get separate speech providers.
