@@ -84,6 +84,10 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
     assert first[0]["method"] == "semantic"
     assert first[0]["score"] == pytest.approx(0.92)
     assert first[0]["matched_tokens"] == []
+    assert retriever.status()["last_candidates"] == [
+        {"topic_key": "job_patient_interaction_level", "score": 0.92, "selected": True},
+        {"topic_key": "country_residence_decision", "score": 0.10, "selected": False},
+    ]
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -186,3 +190,37 @@ async def test_missing_embedding_model_fails_open_and_disables_repeated_calls(mo
     assert retriever.status()["disabled_reason"] == "embedding_model_unavailable"
     assert await retriever.recall("another prompt", [belief]) == []
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_semantic_status_exposes_near_miss_below_threshold(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"embeddings": [[1.0, 0.0], [0.69, 0.31]]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    retriever = OllamaSemanticMemoryRetriever(
+        model="embed",
+        base_url="http://127.0.0.1:11434",
+        threshold=0.72,
+    )
+    belief = verified_belief(
+        "belief_patient",
+        "job_patient_interaction_level",
+        "The user's current job involves little patient interaction.",
+    )
+    assert await retriever.recall("hands-on helping work", [belief]) == []
+    assert retriever.status()["last_candidates"] == [{
+        "topic_key": "job_patient_interaction_level",
+        "score": 0.69,
+        "selected": False,
+    }]

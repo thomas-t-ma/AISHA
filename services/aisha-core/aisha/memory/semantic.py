@@ -28,6 +28,7 @@ class OllamaSemanticMemoryRetriever:
         self.keep_alive = keep_alive
         self._belief_vectors: dict[str, list[float]] = {}
         self.last_error: str | None = None
+        self.last_candidates: list[dict] = []
         self.disabled_reason: str | None = None
 
     @staticmethod
@@ -96,6 +97,7 @@ class OllamaSemanticMemoryRetriever:
         remaining_limit: int | None = None,
     ) -> list[dict]:
         if self.disabled_reason is not None:
+            self.last_candidates = []
             return []
 
         excluded = exclude_belief_ids or set()
@@ -106,6 +108,7 @@ class OllamaSemanticMemoryRetriever:
             and str(belief.get("belief_id", "")) not in excluded
         ]
         if not candidates or not user_text.strip():
+            self.last_candidates = []
             return []
 
         limit = min(self.limit, remaining_limit or self.limit)
@@ -128,14 +131,28 @@ class OllamaSemanticMemoryRetriever:
             ):
                 self._belief_vectors[key] = vector
 
-            ranked: list[tuple[float, str, dict]] = []
+            scored: list[tuple[float, str, dict]] = []
             for belief in candidates:
                 score = self._dot(query_vector, self._belief_vectors[self._cache_key(belief)])
-                if score < self.threshold:
-                    continue
-                ranked.append((
+                scored.append((
                     score,
                     str(belief.get("updated_at", "")),
+                    belief,
+                ))
+
+            scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
+            self.last_candidates = [
+                {
+                    "topic_key": belief.get("topic_key"),
+                    "score": round(score, 4),
+                    "selected": score >= self.threshold,
+                }
+                for score, _updated, belief in scored[:3]
+            ]
+            ranked = [
+                (
+                    score,
+                    updated,
                     {
                         "belief": belief,
                         "method": "semantic",
@@ -143,12 +160,14 @@ class OllamaSemanticMemoryRetriever:
                         "matched_tokens": [],
                         "ignored_low_information_tokens": [],
                     },
-                ))
-
-            ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
+                )
+                for score, updated, belief in scored
+                if score >= self.threshold
+            ]
             self.last_error = None
             return [detail for _score, _updated, detail in ranked[:limit]]
         except Exception as exc:  # noqa: BLE001 - semantic recall must fail open
+            self.last_candidates = []
             self.last_error = f"{type(exc).__name__}: {exc}"
             logger.warning("Semantic memory recall unavailable: %s", self.last_error)
             return []
@@ -161,5 +180,6 @@ class OllamaSemanticMemoryRetriever:
             "limit": self.limit,
             "cached_beliefs": len(self._belief_vectors),
             "last_error": self.last_error,
+            "last_candidates": self.last_candidates,
             "disabled_reason": self.disabled_reason,
         }

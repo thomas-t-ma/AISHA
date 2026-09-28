@@ -363,6 +363,9 @@ semantic additions and at most four total learned memories per turn.
 Recall diagnostics retain the retrieval method. A semantic match appears as
 `method: "semantic"` with its cosine score and no lexical match tokens. Studio
 also shows the configured embedding model and any semantic-retrieval error.
+For threshold tuning, the turn status records the top semantic candidates even
+when they fall below the selection threshold; below-threshold candidates are
+diagnostic only and are never injected into AISHA's prompt.
 
 Semantic retrieval fails open: if embedding generation is unavailable, normal
 chat and lexical recall continue. A missing embedding model disables semantic

@@ -349,6 +349,12 @@ export default function App() {
   )
     ? currentTurnStarted.payload.semantic_recall_status as Record<string, unknown>
     : null;
+  const semanticCandidates = Array.isArray(semanticStatus?.last_candidates)
+    ? semanticStatus.last_candidates.filter(
+        (candidate): candidate is Record<string, unknown> =>
+          typeof candidate === 'object' && candidate !== null,
+      )
+    : [];
   const visibleEvents = events.filter((event) => event.type !== 'aisha.assistant.text_delta');
   const hiddenDeltaCount = events.length - visibleEvents.length;
   const statusText = connection === 'online' ? 'Connected' : connection === 'connecting'
@@ -574,6 +580,16 @@ export default function App() {
                               <dd>{String(semanticStatus?.last_error)}</dd>
                             </div>
                           )}
+                          {semanticCandidates.map((candidate, index) => (
+                            <div key={'semantic-candidate-' + index}>
+                              <dt>Semantic candidate</dt>
+                              <dd>
+                                {String(candidate.topic_key ?? 'unknown')}
+                                {' · '}{String(candidate.score ?? '—')}
+                                {candidate.selected === true ? ' · selected' : ' · below threshold'}
+                              </dd>
+                            </div>
+                          ))}
                           {recallDetails.map((detail, index) => (
                             <div key={String(detail.topic_key ?? index)}>
                               <dt>{String(detail.topic_key ?? 'Match')}</dt>
