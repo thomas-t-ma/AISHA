@@ -56,6 +56,23 @@ button:disabled { cursor: not-allowed; opacity: .44; }
   padding: 15px 11px; background: #1b192b; border: 1px solid #2b2940;
   border-radius: 10px;
 }
+.test-mode-toggle {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  border: 1px solid #3c3650; background: #1c1929; color: #d8d3e7;
+  border-radius: 10px; padding: 11px 12px;
+}
+.test-mode-toggle:hover:not(:disabled) { background: #272137; }
+.test-mode-toggle.active { border-color: #80634b; background: #2b221f; }
+.test-mode-indicator {
+  flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%;
+  background: #7ed7aa;
+}
+.test-mode-toggle.active .test-mode-indicator {
+  background: #e2b877; box-shadow: 0 0 10px #e2b87744;
+}
+.test-mode-toggle > span:last-child { display: flex; flex-direction: column; gap: 3px; }
+.test-mode-toggle strong { font-size: 11px; font-weight: 680; }
+.test-mode-toggle small { color: #918aa7; font-size: 9px; line-height: 1.35; }
 .session-dot { flex: 0 0 7px; height: 7px; border-radius: 50%; background: #a98bff; margin-top: 7px; }
 .session-copy { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .session-copy strong { font-size: 12px; font-weight: 650; }

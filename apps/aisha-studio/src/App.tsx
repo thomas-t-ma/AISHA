@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
-import { createSession, getEvents, getHealth, getMessages, getRuns } from './api';
+import {
+  createSession,
+  getEvents,
+  getHealth,
+  getMessages,
+  getRuns,
+  getSessionSettings,
+  setSessionMemoryMode,
+} from './api';
 import MemoryPanel from './MemoryPanel';
 import type { AISHAEvent, ChatMessage, ModelRun, RuntimeHealth, TurnLatency } from './types';
 
@@ -68,6 +76,8 @@ export default function App() {
   const [selectedRunId, setSelectedRunId] = useState('');
   const [notice, setNotice] = useState('');
   const [creatingSession, setCreatingSession] = useState(false);
+  const [memoryMode, setMemoryMode] = useState<'normal' | 'test'>('normal');
+  const [updatingMemoryMode, setUpdatingMemoryMode] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const creatingRef = useRef(false);
@@ -116,6 +126,13 @@ export default function App() {
   useEffect(() => {
     if (!sessionId) return;
     let closed = false;
+    void getSessionSettings(sessionId)
+      .then((settings) => {
+        if (!closed) setMemoryMode(settings.memory_mode);
+      })
+      .catch(() => {
+        if (!closed) setNotice('Could not load session memory mode.');
+      });
     setConnection('connecting');
     setBusy(false);
     setActiveTurnId(null);
@@ -270,6 +287,23 @@ export default function App() {
     }));
   }
 
+  async function toggleMemoryMode() {
+    if (!sessionId || busy || updatingMemoryMode) return;
+    const next = memoryMode === 'normal' ? 'test' : 'normal';
+    setUpdatingMemoryMode(true);
+    try {
+      const settings = await setSessionMemoryMode(sessionId, next);
+      setMemoryMode(settings.memory_mode);
+      setNotice(settings.memory_mode === 'test'
+        ? 'Test conversation: learned-memory writes are disabled for this session.'
+        : '');
+    } catch {
+      setNotice('Could not change this session’s memory mode.');
+    } finally {
+      setUpdatingMemoryMode(false);
+    }
+  }
+
   async function newSession() {
     if (creatingSession || busy) return;
     setCreatingSession(true);
@@ -281,6 +315,7 @@ export default function App() {
       setSelectedRunId('');
       setLatency({ firstTokenMs: null, totalMs: null });
       setDraft('');
+      setMemoryMode('normal');
       window.localStorage.setItem(SESSION_KEY, id);
       setSessionId(id);
       setNotice('');
@@ -337,6 +372,22 @@ export default function App() {
               <span title={sessionId}>{sessionId ? shortId(sessionId) : 'Creating…'}</span>
             </div>
           </div>
+          <button
+            type="button"
+            className={'test-mode-toggle ' + (memoryMode === 'test' ? 'active' : '')}
+            onClick={() => void toggleMemoryMode()}
+            disabled={!sessionId || busy || updatingMemoryMode}
+            aria-pressed={memoryMode === 'test'}
+            title="Test mode keeps recall available but prevents this session from creating learned memories."
+          >
+            <span className="test-mode-indicator" aria-hidden="true" />
+            <span>
+              <strong>{memoryMode === 'test' ? 'Test conversation' : 'Normal memory'}</strong>
+              <small>{memoryMode === 'test'
+                ? 'Recall on · learning off'
+                : 'Recall on · learning on'}</small>
+            </span>
+          </button>
         </div>
 
         <div className="rail-bottom">
@@ -494,6 +545,11 @@ export default function App() {
                         <div className="small-label metrics-label">MEMORY RECALL</div>
                         <dl className="timing-rows">
                           <div><dt>Retrieved beliefs</dt><dd>{recallCount}</dd></div>
+                          <div>
+                            <dt>Learning</dt>
+                            <dd>{currentTurnStarted?.payload.memory_learning_enabled === false
+                              ? 'Off (test mode)' : 'On'}</dd>
+                          </div>
                           <div>
                             <dt>Topics</dt>
                             <dd>{recallTopics.length ? recallTopics.join(', ') : 'None'}</dd>
