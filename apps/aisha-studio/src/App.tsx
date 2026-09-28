@@ -581,6 +581,10 @@ export default function App() {
                                 : 'Off'}</dd>
                           </div>
                           <div>
+                            <dt>Pipeline</dt>
+                            <dd>{String(semanticStatus?.pipeline_version ?? 'legacy')}</dd>
+                          </div>
+                          <div>
                             <dt>Relevance gate</dt>
                             <dd>{relevanceGateStatus?.enabled === true
                               ? String(relevanceGateStatus.model ?? 'enabled')

@@ -9,6 +9,7 @@ import httpx
 from aisha.memory.relevance import OllamaMemoryRelevanceGate
 
 logger = logging.getLogger(__name__)
+SEMANTIC_PIPELINE_VERSION = "hybrid-rerank-v2"
 
 
 class OllamaSemanticMemoryRetriever:
@@ -270,6 +271,7 @@ class OllamaSemanticMemoryRetriever:
     def status(self) -> dict:
         return {
             "enabled": self.disabled_reason is None,
+            "pipeline_version": SEMANTIC_PIPELINE_VERSION,
             "model": self.model,
             "threshold": self.threshold,
             "candidate_floor": self.candidate_floor,
