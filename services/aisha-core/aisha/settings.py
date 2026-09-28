@@ -23,10 +23,20 @@ class LLMProfile(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
+class MemoryProfile(BaseModel):
+    semantic_recall: bool = False
+    embedding_model: str | None = None
+    embedding_base_url: str | None = None
+    embedding_keep_alive: str | int | None = None
+    semantic_threshold: float = 0.72
+    semantic_limit: int = 2
+
+
 class RuntimeProfile(BaseModel):
     name: str
     compute: dict[str, Any]
     llm: LLMProfile
+    memory: MemoryProfile = Field(default_factory=MemoryProfile)
     stt: dict[str, Any] = Field(default_factory=dict)
     tts: dict[str, Any] = Field(default_factory=dict)
     vision: dict[str, Any] = Field(default_factory=dict)

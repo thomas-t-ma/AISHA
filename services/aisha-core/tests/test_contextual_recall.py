@@ -26,6 +26,47 @@ class PromptProbe:
         yield LLMStreamChunk(text="Okay.")
 
 
+class SemanticProbe:
+    def __init__(self, topic_key: str) -> None:
+        self.topic_key = topic_key
+        self.calls: list[dict] = []
+
+    async def recall(
+        self,
+        user_text: str,
+        beliefs: list[dict],
+        *,
+        exclude_belief_ids: set[str] | None = None,
+        remaining_limit: int | None = None,
+    ) -> list[dict]:
+        self.calls.append({
+            "user_text": user_text,
+            "exclude_belief_ids": exclude_belief_ids or set(),
+            "remaining_limit": remaining_limit,
+        })
+        belief = next(b for b in beliefs if b["topic_key"] == self.topic_key)
+        if belief["belief_id"] in (exclude_belief_ids or set()):
+            return []
+        return [{
+            "belief": belief,
+            "method": "semantic",
+            "score": 0.84,
+            "matched_tokens": [],
+            "ignored_low_information_tokens": [],
+        }]
+
+    def status(self) -> dict:
+        return {
+            "enabled": True,
+            "model": "semantic-probe",
+            "threshold": 0.72,
+            "limit": 2,
+            "cached_beliefs": 1,
+            "last_error": None,
+            "disabled_reason": None,
+        }
+
+
 async def add_belief(
     ledger: ExperienceLedger,
     *,
@@ -351,3 +392,90 @@ async def test_switching_test_session_back_to_normal_resumes_learning(tmp_path):
     _ = [event async for event in orch.stream_user_turn(session, "Synthetic test statement.")]
     await orch.wait_for_reflections()
     assert reflector.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_semantic_recall_fills_gap_after_lexical_retrieval(tmp_path):
+    store = AISHAStore(tmp_path / "semantic.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    patient = await add_belief(
+        ledger,
+        topic="job_patient_interaction_level",
+        text="The user's current job involves little patient interaction.",
+        quote="My current job doesn't have much patient interaction.",
+        verified=True,
+    )
+
+    provider = PromptProbe()
+    semantic = SemanticProbe("job_patient_interaction_level")
+    orch = AISHAOrchestrator(
+        store,
+        load_persona(Settings(aisha_profile="mock").character_dir),
+        provider,
+        ledger=ledger,
+        semantic_retriever=semantic,
+    )
+    session = await store.create_session()
+    await store.set_session_memory_mode(session, "test")
+    events = [
+        event async for event in orch.stream_user_turn(
+            session,
+            "I'm getting tired of spending so much of my day away from the people "
+            "I'm supposed to be helping. I think I'd enjoy something more hands-on.",
+        )
+    ]
+
+    prompt = provider.prompts[-1]
+    assert "current job involves little patient interaction" in prompt
+    started = next(event for event in events if event.type == "aisha.turn.started")
+    assert started.payload["memory_recall_topics"] == [
+        "job_patient_interaction_level"
+    ]
+    assert started.payload["memory_recall_details"] == [{
+        "topic_key": "job_patient_interaction_level",
+        "method": "semantic",
+        "score": 0.84,
+        "matched_tokens": [],
+        "ignored_low_information_tokens": [],
+    }]
+    assert started.payload["semantic_recall_status"]["enabled"] is True
+    assert semantic.calls[0]["exclude_belief_ids"] == set()
+    assert patient["belief_id"] not in semantic.calls[0]["exclude_belief_ids"]
+
+
+@pytest.mark.asyncio
+async def test_lexical_match_wins_and_semantic_retrieval_cannot_duplicate_it(tmp_path):
+    store = AISHAStore(tmp_path / "hybrid.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    patient = await add_belief(
+        ledger,
+        topic="job_patient_interaction_level",
+        text="The user's current job involves little patient interaction.",
+        quote="My current job doesn't have much patient interaction.",
+        verified=True,
+    )
+
+    provider = PromptProbe()
+    semantic = SemanticProbe("job_patient_interaction_level")
+    orch = AISHAOrchestrator(
+        store,
+        load_persona(Settings(aisha_profile="mock").character_dir),
+        provider,
+        ledger=ledger,
+        semantic_retriever=semantic,
+    )
+    session = await store.create_session()
+    events = [
+        event async for event in orch.stream_user_turn(
+            session, "I want more patient interaction at work."
+        )
+    ]
+
+    started = next(event for event in events if event.type == "aisha.turn.started")
+    assert started.payload["memory_recall_count"] == 1
+    assert started.payload["memory_recall_details"][0]["method"] == "lexical"
+    assert semantic.calls[0]["exclude_belief_ids"] == {patient["belief_id"]}

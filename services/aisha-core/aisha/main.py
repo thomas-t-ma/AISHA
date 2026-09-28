@@ -13,6 +13,7 @@ from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.reflector import OllamaReflector
+from aisha.memory.semantic import OllamaSemanticMemoryRetriever
 from aisha.providers.base import AISHAProviderError
 from aisha.providers.registry import build_llm_provider
 from aisha.settings import Settings
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI):
     await ledger.initialize()
     reflector = None
     evidence_verifier = None
+    semantic_retriever = None
     if settings.aisha_auto_memory and profile.llm.provider == "ollama" and profile.llm.base_url:
         reflector = OllamaReflector(
             model=profile.llm.model,
@@ -63,9 +65,21 @@ async def lifespan(app: FastAPI):
             base_url=profile.llm.base_url,
             keep_alive=profile.llm.keep_alive,
         )
+    if (
+        profile.memory.semantic_recall
+        and profile.memory.embedding_model
+        and (profile.memory.embedding_base_url or profile.llm.base_url)
+    ):
+        semantic_retriever = OllamaSemanticMemoryRetriever(
+            model=profile.memory.embedding_model,
+            base_url=profile.memory.embedding_base_url or profile.llm.base_url or "",
+            keep_alive=profile.memory.embedding_keep_alive,
+            threshold=profile.memory.semantic_threshold,
+            limit=profile.memory.semantic_limit,
+        )
     orchestrator = AISHAOrchestrator(
         store, persona, provider, ledger=ledger, reflector=reflector,
-        evidence_verifier=evidence_verifier
+        evidence_verifier=evidence_verifier, semantic_retriever=semantic_retriever,
     )
 
     app.state.aisha = {

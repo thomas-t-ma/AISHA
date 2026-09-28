@@ -339,3 +339,36 @@ disabled.
 This mode is designed for development prompts that are not necessarily true
 about the user. It does not retroactively remove beliefs created by earlier
 normal-mode tests; those should be forgotten manually if they were synthetic.
+
+
+## Hybrid semantic recall v1 (experimental)
+
+The M2 Max profile can now augment high-precision lexical memory recall with a
+small local embedding model. Lexical retrieval always runs first. Semantic
+retrieval only fills unused recall slots, cannot duplicate an already-selected
+lexical belief, and still considers only `verified` learned beliefs.
+
+The default Mac embedding model is:
+
+```bash
+ollama pull qwen3-embedding:0.6b
+```
+
+Core calls Ollama's current `/api/embed` endpoint with batched inputs. Belief
+vectors are cached in-process by belief ID/revision/content; after the first
+comparison, subsequent turns normally embed only the new user message. The
+default semantic cosine-similarity threshold is `0.72`, with at most two
+semantic additions and at most four total learned memories per turn.
+
+Recall diagnostics retain the retrieval method. A semantic match appears as
+`method: "semantic"` with its cosine score and no lexical match tokens. Studio
+also shows the configured embedding model and any semantic-retrieval error.
+
+Semantic retrieval fails open: if embedding generation is unavailable, normal
+chat and lexical recall continue. A missing embedding model disables semantic
+recall for that Core process after the first 404 rather than retrying on every
+turn; pull the model and restart Core to re-enable it.
+
+Use **Test conversation** mode when tuning thresholds or trying synthetic
+paraphrases. Recall remains active while those test turns are prevented from
+creating or revising learned beliefs.

@@ -14,6 +14,7 @@ from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.quotes import original_source_quote
 from aisha.memory.reflector import OllamaReflector
 from aisha.memory.retrieval import explain_relevant_beliefs
+from aisha.memory.semantic import OllamaSemanticMemoryRetriever
 from aisha.providers.base import AISHAProviderError
 from aisha.storage.database import AISHAStore
 
@@ -30,6 +31,7 @@ class AISHAOrchestrator:
         ledger: ExperienceLedger | None = None,
         reflector: OllamaReflector | None = None,
         evidence_verifier: OllamaEvidenceVerifier | None = None,
+        semantic_retriever: OllamaSemanticMemoryRetriever | None = None,
     ) -> None:
         self.store = store
         self.persona = persona
@@ -37,6 +39,7 @@ class AISHAOrchestrator:
         self.ledger = ledger
         self.reflector = reflector
         self.evidence_verifier = evidence_verifier
+        self.semantic_retriever = semantic_retriever
         self._reflections: set[asyncio.Task[None]] = set()
         self._last_reflection_error: str | None = None
         self._last_reflection_result: dict | None = None
@@ -47,6 +50,11 @@ class AISHAOrchestrator:
         return {
             "enabled": self.reflector is not None and self.ledger is not None,
             "evidence_check_enabled": self.evidence_verifier is not None,
+            "semantic_recall": (
+                self.semantic_retriever.status()
+                if self.semantic_retriever is not None
+                else {"enabled": False}
+            ),
             "active_reflections": len(self._reflections),
             "last_error": self._last_reflection_error,
             "last_result": self._last_reflection_result,
@@ -278,7 +286,20 @@ class AISHAOrchestrator:
         learned_beliefs = (
             await self.ledger.list_beliefs(limit=50) if self.ledger is not None else []
         )
-        recall_details = explain_relevant_beliefs(text, learned_beliefs, limit=4)
+        lexical_details = explain_relevant_beliefs(text, learned_beliefs, limit=4)
+        semantic_details: list[dict] = []
+        if self.semantic_retriever is not None and len(lexical_details) < 4:
+            lexical_ids = {
+                str(detail["belief"].get("belief_id", ""))
+                for detail in lexical_details
+            }
+            semantic_details = await self.semantic_retriever.recall(
+                text,
+                learned_beliefs,
+                exclude_belief_ids=lexical_ids,
+                remaining_limit=4 - len(lexical_details),
+            )
+        recall_details = lexical_details + semantic_details
         recalled_beliefs = [detail["belief"] for detail in recall_details]
         memory_lines: list[str] = []
         remaining = 2400
@@ -373,6 +394,11 @@ class AISHAOrchestrator:
                 ],
                 "memory_mode": memory_mode,
                 "memory_learning_enabled": memory_learning_enabled,
+                "semantic_recall_status": (
+                    self.semantic_retriever.status()
+                    if self.semantic_retriever is not None
+                    else {"enabled": False}
+                ),
             },
         )
         yield started_event

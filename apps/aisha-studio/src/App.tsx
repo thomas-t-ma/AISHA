@@ -343,6 +343,12 @@ export default function App() {
           typeof detail === 'object' && detail !== null,
       )
     : [];
+  const semanticStatus = (
+    typeof currentTurnStarted?.payload.semantic_recall_status === 'object'
+    && currentTurnStarted.payload.semantic_recall_status !== null
+  )
+    ? currentTurnStarted.payload.semantic_recall_status as Record<string, unknown>
+    : null;
   const visibleEvents = events.filter((event) => event.type !== 'aisha.assistant.text_delta');
   const hiddenDeltaCount = events.length - visibleEvents.length;
   const statusText = connection === 'online' ? 'Connected' : connection === 'connecting'
@@ -554,6 +560,20 @@ export default function App() {
                             <dt>Topics</dt>
                             <dd>{recallTopics.length ? recallTopics.join(', ') : 'None'}</dd>
                           </div>
+                          <div>
+                            <dt>Semantic</dt>
+                            <dd>{semanticStatus?.enabled === true
+                              ? String(semanticStatus.model ?? 'enabled')
+                              : semanticStatus?.disabled_reason
+                                ? 'Off · ' + String(semanticStatus.disabled_reason)
+                                : 'Off'}</dd>
+                          </div>
+                          {semanticStatus?.last_error && (
+                            <div>
+                              <dt>Semantic error</dt>
+                              <dd>{String(semanticStatus.last_error)}</dd>
+                            </div>
+                          )}
                           {recallDetails.map((detail, index) => (
                             <div key={String(detail.topic_key ?? index)}>
                               <dt>{String(detail.topic_key ?? 'Match')}</dt>

@@ -13,6 +13,13 @@ llm:
   keep_alive: 30m
   options:
     num_ctx: 32768
+memory:
+  semantic_recall: true
+  embedding_model: qwen3-embedding:0.6b
+  embedding_base_url: http://127.0.0.1:11434
+  embedding_keep_alive: 30m
+  semantic_threshold: 0.72
+  semantic_limit: 2
 stt:
   provider: disabled
   planned_provider: mlx-whisper
