@@ -74,18 +74,21 @@ async def test_run_case_combines_lexical_and_semantic_without_database():
     beliefs = synthetic_beliefs()
     case = RecallCase(
         case_id="combined",
-        text="I want more patient interaction and I miss making things with clay.",
-        expected_topics=("job_patient_interaction_level", "pottery_hobby"),
+        text=(
+            "I want more patient interaction, and I don't want my next role "
+            "to keep me onsite every weekday."
+        ),
+        expected_topics=("job_patient_interaction_level", "remote_work_preference"),
         category="test",
     )
-    semantic = FakeSemanticRetriever("pottery_hobby")
+    semantic = FakeSemanticRetriever("remote_work_preference")
 
     result = await run_case(case, beliefs, semantic)
 
     assert result["exact"] is True
     assert set(result["actual_topics"]) == {
         "job_patient_interaction_level",
-        "pottery_hobby",
+        "remote_work_preference",
     }
     assert {row["method"] for row in result["methods"]} == {
         "lexical",
