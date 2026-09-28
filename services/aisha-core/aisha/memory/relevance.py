@@ -10,7 +10,7 @@ Decide whether each candidate personal memory is directly useful for responding
 to the user's CURRENT message.
 
 Return ONLY JSON:
-{"decisions":[{"index":0,"relevant":true|false,"reason":"short explanation"}]}
+{"decisions":[{"index":0,"relevant":true|false,"reason":"<=12 words"}]}
 
 Relevant means the CURRENT message is actually about the user's same underlying
 personal situation, decision, preference, goal, relationship, problem, or
@@ -44,6 +44,10 @@ mentioned. Ask two questions: (1) what exact personal proposition does this
 memory add, and (2) is that proposition actually active in the CURRENT message?
 If the answer to (2) is not clearly yes, reject it.
 
+Keep each reason extremely short (12 words maximum). The reason is diagnostic,
+not an explanation for the user. Examples: "same patient-contact problem",
+"adjacent work issue only", "general question, not personal continuity".
+
 Judge RELEVANCE only. Do not decide whether the memory is true, current, or
 factually verified; another subsystem handles evidence integrity. If uncertain,
 prefer false.
@@ -63,10 +67,12 @@ class OllamaMemoryRelevanceGate:
         self.keep_alive = keep_alive
         self.last_error: str | None = None
         self.last_decisions: list[dict] = []
+        self.last_metrics: dict = {}
 
     def reset(self) -> None:
         self.last_error = None
         self.last_decisions = []
+        self.last_metrics = {}
 
     @staticmethod
     def _parse(raw: str, expected: int) -> list[dict] | None:
@@ -137,7 +143,7 @@ class OllamaMemoryRelevanceGate:
             "think": False,
             "options": {
                 "temperature": 0,
-                "num_predict": 420,
+                "num_predict": 180,
                 "num_ctx": 4096,
             },
             "messages": [
@@ -163,6 +169,16 @@ class OllamaMemoryRelevanceGate:
                 response = await client.post(f"{self.base_url}/api/chat", json=payload)
                 response.raise_for_status()
                 data = response.json()
+            self.last_metrics = {
+                "total_ms": round(float(data.get("total_duration", 0)) / 1_000_000, 3),
+                "load_ms": round(float(data.get("load_duration", 0)) / 1_000_000, 3),
+                "prompt_eval_ms": round(
+                    float(data.get("prompt_eval_duration", 0)) / 1_000_000, 3
+                ),
+                "eval_ms": round(float(data.get("eval_duration", 0)) / 1_000_000, 3),
+                "prompt_tokens": int(data.get("prompt_eval_count", 0) or 0),
+                "output_tokens": int(data.get("eval_count", 0) or 0),
+            }
             raw = data.get("message", {}).get("content")
             if not isinstance(raw, str):
                 raise TypeError("relevance_gate_missing_response")
@@ -181,6 +197,7 @@ class OllamaMemoryRelevanceGate:
                 }
                 for index in range(len(candidates))
             ]
+            self.last_metrics = {}
             self.last_error = f"{type(exc).__name__}: {exc}"
             return self.last_decisions
 
@@ -190,4 +207,5 @@ class OllamaMemoryRelevanceGate:
             "model": self.model,
             "last_error": self.last_error,
             "last_decisions": self.last_decisions,
+            "last_metrics": self.last_metrics,
         }

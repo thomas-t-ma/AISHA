@@ -32,6 +32,14 @@ def parse_args() -> argparse.Namespace:
         default=[],
         help="Run only the named case ID. May be repeated.",
     )
+    parser.add_argument(
+        "--reranker-model",
+        default=None,
+        help=(
+            "Override the profile's relevance-gate model for this benchmark "
+            "without changing production configuration."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -46,11 +54,25 @@ async def main() -> None:
         raise SystemExit(f"Profile {args.profile!r} does not define an Ollama base URL.")
 
     gate = None
+    reranker_model = (
+        args.reranker_model
+        or profile.memory.semantic_relevance_model
+        or profile.llm.model
+    )
+    relevance_base_url = (
+        profile.memory.semantic_relevance_base_url
+        or profile.llm.base_url
+    )
+    relevance_keep_alive = (
+        profile.memory.semantic_relevance_keep_alive
+        if profile.memory.semantic_relevance_keep_alive is not None
+        else profile.llm.keep_alive
+    )
     if profile.memory.semantic_relevance_gate:
         gate = OllamaMemoryRelevanceGate(
-            model=profile.llm.model,
-            base_url=profile.llm.base_url,
-            keep_alive=profile.llm.keep_alive,
+            model=reranker_model,
+            base_url=relevance_base_url,
+            keep_alive=relevance_keep_alive,
         )
 
     retriever = OllamaSemanticMemoryRetriever(
@@ -78,7 +100,7 @@ async def main() -> None:
     print(
         f"AISHA semantic recall benchmark\n"
         f"Embedding: {profile.memory.embedding_model}\n"
-        f"Reranker: {profile.llm.model if gate is not None else 'disabled'}\n"
+        f"Reranker: {reranker_model if gate is not None else 'disabled'}\n"
         f"Cases: {len(selected_cases)} · Synthetic memories: {len(beliefs)}\n"
     )
 
@@ -114,6 +136,16 @@ async def main() -> None:
             )
             if candidate.get("reason"):
                 print(f"    reason: {candidate.get('reason')}")
+        gate_metrics = result.get("relevance_gate", {}).get("last_metrics", {})
+        if gate_metrics:
+            print(
+                "  gate: "
+                f"{gate_metrics.get('total_ms', 0):.0f} ms total · "
+                f"{gate_metrics.get('prompt_eval_ms', 0):.0f} ms prompt · "
+                f"{gate_metrics.get('eval_ms', 0):.0f} ms generation · "
+                f"{gate_metrics.get('prompt_tokens', 0)}→"
+                f"{gate_metrics.get('output_tokens', 0)} tokens"
+            )
 
     summary = summarize_results(results)
     print("\nSUMMARY")
@@ -133,6 +165,7 @@ async def main() -> None:
     print(
         f"Median retrieval: {summary['latency_ms']['median_total']:.0f} ms · "
         f"Median semantic: {summary['latency_ms']['median_semantic']:.0f} ms · "
+        f"Median gate: {summary['latency_ms']['median_gate']:.0f} ms · "
         f"Max retrieval: {summary['latency_ms']['max_total']:.0f} ms"
     )
     print("Methods:", json.dumps(summary["method_counts"], sort_keys=True))
@@ -141,7 +174,7 @@ async def main() -> None:
     payload = {
         "profile": args.profile,
         "embedding_model": profile.memory.embedding_model,
-        "reranker_model": profile.llm.model if gate is not None else None,
+        "reranker_model": reranker_model if gate is not None else None,
         "beliefs": beliefs,
         "summary": summary,
         "results": results,

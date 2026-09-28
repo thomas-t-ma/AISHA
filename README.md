@@ -451,6 +451,25 @@ Run one case while debugging:
 python scripts/benchmark_memory_recall.py --case patient_contact_paraphrase
 ```
 
+
+The final relevance-gate model can be benchmarked independently from AISHA's
+conversation model:
+
+```bash
+python scripts/benchmark_memory_recall.py \
+  --reranker-model qwen3.5:4b \
+  --output /tmp/aisha-memory-recall-4b.json
+```
+
+This override is benchmark-only and does not change the runtime profile. The
+production gate continues to fall back to the main conversation model unless
+`memory.semantic_relevance_model` is configured explicitly.
+
+The benchmark also reports the gate's Ollama timings (load, prompt evaluation,
+generation, prompt tokens, and output tokens). Gate reasons are intentionally
+limited to terse diagnostics so the judge spends tokens deciding rather than
+writing explanations.
+
 The benchmark is intentionally synthetic so threshold/reranker experiments
 cannot contaminate AISHA's real autobiographical memory. A failure is not
 automatically a reason to loosen thresholds; inspect whether it was a lexical

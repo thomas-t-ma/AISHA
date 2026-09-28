@@ -314,6 +314,13 @@ def summarize_results(results: list[dict]) -> dict:
         if float(row["latency_ms"]["semantic"]) > 0
     ]
     total_latencies = [float(row["latency_ms"]["total"]) for row in results]
+    gate_latencies = [
+        float(row.get("relevance_gate", {}).get("last_metrics", {}).get("total_ms", 0))
+        for row in results
+        if float(
+            row.get("relevance_gate", {}).get("last_metrics", {}).get("total_ms", 0)
+        ) > 0
+    ]
 
     method_counts: dict[str, int] = {}
     candidate_decisions: dict[str, int] = {}
@@ -347,6 +354,8 @@ def summarize_results(results: list[dict]) -> dict:
             "median_semantic": (
                 round(median(semantic_latencies), 3) if semantic_latencies else 0.0
             ),
+            "median_gate": round(median(gate_latencies), 3) if gate_latencies else 0.0,
+            "max_gate": round(max(gate_latencies), 3) if gate_latencies else 0.0,
             "max_total": round(max(total_latencies), 3) if total_latencies else 0.0,
         },
     }

@@ -27,3 +27,6 @@ def test_m2max_profile_preloads_conversation_model():
     assert profile.memory.semantic_candidate_floor == 0.30
     assert profile.memory.semantic_limit == 2
     assert profile.memory.semantic_relevance_gate is True
+    assert profile.memory.semantic_relevance_model is None
+    assert profile.memory.semantic_relevance_base_url is None
+    assert profile.memory.semantic_relevance_keep_alive is None

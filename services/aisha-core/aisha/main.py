@@ -73,9 +73,16 @@ async def lifespan(app: FastAPI):
         and profile.llm.base_url
     ):
         semantic_relevance_gate = OllamaMemoryRelevanceGate(
-            model=profile.llm.model,
-            base_url=profile.llm.base_url,
-            keep_alive=profile.llm.keep_alive,
+            model=profile.memory.semantic_relevance_model or profile.llm.model,
+            base_url=(
+                profile.memory.semantic_relevance_base_url
+                or profile.llm.base_url
+            ),
+            keep_alive=(
+                profile.memory.semantic_relevance_keep_alive
+                if profile.memory.semantic_relevance_keep_alive is not None
+                else profile.llm.keep_alive
+            ),
         )
     if (
         profile.memory.semantic_recall

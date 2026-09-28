@@ -32,6 +32,9 @@ class MemoryProfile(BaseModel):
     semantic_candidate_floor: float = 0.30
     semantic_limit: int = 2
     semantic_relevance_gate: bool = False
+    semantic_relevance_model: str | None = None
+    semantic_relevance_base_url: str | None = None
+    semantic_relevance_keep_alive: str | int | None = None
     semantic_query_instruction: str = (
         "Given a user's current message, retrieve a previously stated personal "
         "memory that is directly relevant and useful for responding. Prefer the "
