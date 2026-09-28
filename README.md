@@ -314,3 +314,28 @@ normalizer had produced artifacts such as `something -> someth` and
 Recall diagnostics distinguish the tokens that actually justified selection
 from low-information overlap that was ignored. A belief is not retrieved when
 its only shared words with the current turn are low-information terms.
+
+
+## Test conversation mode (experimental)
+
+Studio can mark the current session as a **Test conversation**. This is a
+memory sandbox for synthetic prompts and regression tests:
+
+- existing verified memories remain eligible for contextual recall;
+- normal chat messages and model runs still persist in that test session;
+- autonomous memory episodes are **not** created for test-mode turns;
+- post-turn reflection is **not** scheduled, so those turns cannot add or
+  revise learned beliefs;
+- each turn-start event records `memory_mode: "test"` and
+  `memory_learning_enabled: false`;
+- Core persists an `aisha.memory.learning_skipped` event with reason
+  `test_mode` after the completed turn.
+
+The setting is stored per session and defaults to `normal`. Switching the
+same session back to Normal memory re-enables learning for subsequent turns.
+The Studio composer displays a persistent test-mode warning while learning is
+disabled.
+
+This mode is designed for development prompts that are not necessarily true
+about the user. It does not retroactively remove beliefs created by earlier
+normal-mode tests; those should be forgotten manually if they were synthetic.

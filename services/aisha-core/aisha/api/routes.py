@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
@@ -39,6 +41,15 @@ class SessionResponse(BaseModel):
     session_id: str
 
 
+class SessionSettingsResponse(BaseModel):
+    session_id: str
+    memory_mode: Literal["normal", "test"]
+
+
+class SessionSettingsWrite(BaseModel):
+    memory_mode: Literal["normal", "test"]
+
+
 class CancelResponse(BaseModel):
     cancelled_turn_id: str | None
 
@@ -62,6 +73,33 @@ async def health(request: Request):
 async def create_session(request: Request):
     session_id = await request.app.state.aisha["store"].create_session()
     return SessionResponse(session_id=session_id)
+
+
+@router.get("/sessions/{session_id}", response_model=SessionSettingsResponse)
+async def get_session_settings(session_id: str, request: Request):
+    session = await request.app.state.aisha["store"].session_info(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return SessionSettingsResponse(
+        session_id=session["session_id"], memory_mode=session["memory_mode"]
+    )
+
+
+@router.patch("/sessions/{session_id}", response_model=SessionSettingsResponse)
+async def update_session_settings(
+    session_id: str,
+    settings: SessionSettingsWrite,
+    request: Request,
+):
+    _check_local_origin(request)
+    session = await request.app.state.aisha["store"].set_session_memory_mode(
+        session_id, settings.memory_mode
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return SessionSettingsResponse(
+        session_id=session["session_id"], memory_mode=session["memory_mode"]
+    )
 
 
 @router.post("/sessions/{session_id}/cancel", response_model=CancelResponse)

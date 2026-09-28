@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from collections.abc import AsyncIterator
 
 import pytest
@@ -108,3 +109,21 @@ async def test_session_events_limit_returns_latest_records_in_chronological_orde
         "test.event.3",
         "test.event.4",
     ]
+
+
+@pytest.mark.asyncio
+async def test_session_schema_upgrade_preserves_existing_sessions(tmp_path):
+    path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "CREATE TABLE sessions ("
+            "session_id TEXT PRIMARY KEY, "
+            "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        db.execute("INSERT INTO sessions(session_id) VALUES ('session_old')")
+
+    store = AISHAStore(path)
+    await store.initialize()
+    session = await store.session_info("session_old")
+    assert session is not None
+    assert session["memory_mode"] == "normal"

@@ -61,3 +61,46 @@ def test_studio_browser_websocket_streams_same_origin(tmp_path, monkeypatch):
         assert events[0] == "aisha.turn.started"
         assert "aisha.assistant.text_delta" in events
         assert events[-1] == "aisha.turn.finished"
+
+
+def test_session_memory_mode_defaults_normal_and_can_be_toggled(tmp_path, monkeypatch):
+    monkeypatch.setenv("AISHA_PROFILE", "mock")
+    monkeypatch.setenv("AISHA_DATA_DIR", str(tmp_path))
+
+    with TestClient(app) as client:
+        session_id = client.post("/v1/sessions").json()["session_id"]
+
+        initial = client.get(f"/v1/sessions/{session_id}")
+        assert initial.status_code == 200
+        assert initial.json() == {
+            "session_id": session_id,
+            "memory_mode": "normal",
+        }
+
+        changed = client.patch(
+            f"/v1/sessions/{session_id}",
+            json={"memory_mode": "test"},
+            headers={"origin": "http://127.0.0.1:5173"},
+        )
+        assert changed.status_code == 200
+        assert changed.json()["memory_mode"] == "test"
+
+        restored = client.patch(
+            f"/v1/sessions/{session_id}",
+            json={"memory_mode": "normal"},
+        )
+        assert restored.status_code == 200
+        assert restored.json()["memory_mode"] == "normal"
+
+        invalid = client.patch(
+            f"/v1/sessions/{session_id}",
+            json={"memory_mode": "fiction"},
+        )
+        assert invalid.status_code == 422
+
+        rejected_origin = client.patch(
+            f"/v1/sessions/{session_id}",
+            json={"memory_mode": "test"},
+            headers={"origin": "https://unrelated.example"},
+        )
+        assert rejected_origin.status_code == 403

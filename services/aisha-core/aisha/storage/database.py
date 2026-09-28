@@ -13,7 +13,8 @@ from aisha.contracts.turns import Message
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    memory_mode TEXT NOT NULL DEFAULT 'normal'
 );
 CREATE TABLE IF NOT EXISTS messages (
     message_id TEXT PRIMARY KEY,
@@ -94,6 +95,16 @@ class AISHAStore:
                 }
                 if "backend_metrics_json" not in columns:
                     db.execute("ALTER TABLE model_runs ADD COLUMN backend_metrics_json TEXT")
+                session_columns = {
+                    row["name"] for row in db.execute(
+                        "PRAGMA table_info(sessions)"
+                    ).fetchall()
+                }
+                if "memory_mode" not in session_columns:
+                    db.execute(
+                        "ALTER TABLE sessions ADD COLUMN memory_mode "
+                        "TEXT NOT NULL DEFAULT 'normal'"
+                    )
 
         await asyncio.to_thread(work)
 
@@ -106,6 +117,39 @@ class AISHAStore:
 
         await asyncio.to_thread(work)
         return session_id
+
+    async def session_info(self, session_id: str) -> dict | None:
+        def work() -> dict | None:
+            with self._connect() as db:
+                row = db.execute(
+                    "SELECT session_id, created_at, memory_mode FROM sessions "
+                    "WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                return dict(row) if row is not None else None
+
+        return await asyncio.to_thread(work)
+
+    async def set_session_memory_mode(self, session_id: str, memory_mode: str) -> dict | None:
+        if memory_mode not in {"normal", "test"}:
+            raise ValueError("Unsupported memory mode")
+
+        def work() -> dict | None:
+            with self._connect() as db:
+                cursor = db.execute(
+                    "UPDATE sessions SET memory_mode = ? WHERE session_id = ?",
+                    (memory_mode, session_id),
+                )
+                if not cursor.rowcount:
+                    return None
+                row = db.execute(
+                    "SELECT session_id, created_at, memory_mode FROM sessions "
+                    "WHERE session_id = ?",
+                    (session_id,),
+                ).fetchone()
+                return dict(row)
+
+        return await asyncio.to_thread(work)
 
     async def ensure_session(self, session_id: str) -> None:
         def work() -> None:
