@@ -390,6 +390,14 @@ class OllamaSemanticMemoryRetriever:
                         **candidate,
                         "reranker_reason": decision["reason"],
                     })
+        elif borderline:
+            for candidate in borderline:
+                topic = str(candidate["belief"].get("topic_key", ""))
+                decisions_by_topic[topic] = {
+                    "selected": False,
+                    "decision": "below_direct_threshold",
+                    "reason": "no_relevance_gate_configured",
+                }
 
         self.last_candidates = []
         for score, _updated, belief in scored[:3]:
