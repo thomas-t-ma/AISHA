@@ -360,6 +360,9 @@ class AISHAOrchestrator:
                         "method": detail["method"],
                         "score": detail["score"],
                         "matched_tokens": detail["matched_tokens"],
+                        "ignored_low_information_tokens": detail[
+                            "ignored_low_information_tokens"
+                        ],
                     }
                     for detail in recall_details
                 ],

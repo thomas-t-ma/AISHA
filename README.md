@@ -301,3 +301,16 @@ normalized tokens. A paraphrase such as "spending my day away from the people
 I'm supposed to be helping" is therefore a deliberate zero-recall baseline for
 the verified `job_patient_interaction_level` memory unless the actual prompt or
 stored belief contains overlapping terms.
+
+
+### Lexical recall precision
+
+The lexical ranker now ignores low-information conversational overlap such as
+`more`, `think`, `something`, and `getting` when deciding whether a belief
+is relevant. It also no longer strips `-ing` / `-ed` suffixes naively; that
+normalizer had produced artifacts such as `something -> someth` and
+`getting -> gett`. Simple plural normalization remains.
+
+Recall diagnostics distinguish the tokens that actually justified selection
+from low-information overlap that was ignored. A belief is not retrieved when
+its only shared words with the current turn are low-information terms.

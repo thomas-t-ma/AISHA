@@ -504,6 +504,10 @@ export default function App() {
                                 {Array.isArray(detail.matched_tokens)
                                   ? detail.matched_tokens.join(', ') || 'none'
                                   : 'none'}
+                                {Array.isArray(detail.ignored_low_information_tokens)
+                                  && detail.ignored_low_information_tokens.length
+                                  ? ' · ignored ' + detail.ignored_low_information_tokens.join(', ')
+                                  : ''}
                               </dd>
                             </div>
                           ))}

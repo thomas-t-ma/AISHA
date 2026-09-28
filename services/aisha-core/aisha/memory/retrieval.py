@@ -13,6 +13,16 @@ STOPWORDS = {
     "you", "your",
 }
 
+# These words are too conversationally common to justify recalling a personal
+# memory on their own. Keep this separate from STOPWORDS so diagnostics can
+# distinguish structural stop words from low-information content words.
+LOW_INFORMATION_RECALL_TOKENS = {
+    "about", "again", "away", "current", "day", "enjoy", "feel", "get",
+    "getting", "help", "helping", "just", "little", "lot", "make", "more",
+    "much", "really", "something", "supposed", "think", "thinking", "thing",
+    "tired", "want", "wish",
+}
+
 
 def _tokens(text: str) -> list[str]:
     raw = [token.lower() for token in TOKEN_RE.findall(text.replace("_", " "))]
@@ -20,11 +30,10 @@ def _tokens(text: str) -> list[str]:
     for token in raw:
         if token in STOPWORDS or len(token) < 3:
             continue
-        if len(token) > 5 and token.endswith("ing"):
-            token = token[:-3]
-        elif len(token) > 4 and token.endswith("ed"):
-            token = token[:-2]
-        elif len(token) > 4 and token.endswith("s"):
+        # Precision-first normalization: only collapse simple plurals. Earlier
+        # suffix chopping turned "something" -> "someth" and "getting" -> "gett",
+        # creating misleading overlaps between unrelated memories.
+        if len(token) > 4 and token.endswith("s") and not token.endswith("ss"):
             token = token[:-1]
         normalized.append(token)
     return normalized
@@ -65,11 +74,12 @@ def explain_relevant_beliefs(
     ranked: list[tuple[float, str, dict]] = []
     for belief, topic, text, question in docs:
         overlap = query & (topic | text | question)
-        if not overlap:
+        informative_overlap = overlap - LOW_INFORMATION_RECALL_TOKENS
+        if not informative_overlap:
             continue
 
         score = 0.0
-        for token in overlap:
+        for token in informative_overlap:
             rarity = 1.0 + log((n_docs + 1) / (df[token] + 1))
             if token in topic:
                 score += 2.5 * rarity
@@ -78,7 +88,7 @@ def explain_relevant_beliefs(
             if token in question:
                 score += 1.25 * rarity
 
-        if len(overlap) >= 2:
+        if len(informative_overlap) >= 2:
             score += 1.5
 
         ranked.append((
@@ -88,7 +98,10 @@ def explain_relevant_beliefs(
                 "belief": belief,
                 "method": "lexical",
                 "score": round(score, 4),
-                "matched_tokens": sorted(overlap),
+                "matched_tokens": sorted(informative_overlap),
+                "ignored_low_information_tokens": sorted(
+                    overlap & LOW_INFORMATION_RECALL_TOKENS
+                ),
             },
         ))
 

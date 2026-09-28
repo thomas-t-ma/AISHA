@@ -108,6 +108,39 @@ def test_retrieval_only_considers_verified_and_relevant_beliefs():
     assert details[0]["score"] > 0
 
 
+    # Generic conversational overlap must not recall an otherwise unrelated
+    # belief. This reproduces the runtime "gett"/"more" false-positive class.
+    noisy_belief = [{
+        "topic_key": "job_patient_interaction_level",
+        "text": "The user is getting more concerned about patient interaction.",
+        "open_question": None,
+        "evidence_status": "verified",
+        "updated_at": "2026-09-21T17:52:15",
+    }]
+    noisy_prompt = (
+        "I'm getting tired and think I'd enjoy something more hands-on."
+    )
+    assert select_relevant_beliefs(noisy_prompt, noisy_belief) == []
+
+
+def test_precision_first_tokenization_does_not_create_suffix_artifacts():
+    belief = [{
+        "topic_key": "preference_for_hands_on_work",
+        "text": "The user thinks they would enjoy something more hands-on.",
+        "open_question": None,
+        "evidence_status": "verified",
+        "updated_at": "2026-09-21T18:30:00",
+    }]
+    details = explain_relevant_beliefs(
+        "I think I'd enjoy something more hands-on.", belief
+    )
+    assert len(details) == 1
+    assert details[0]["matched_tokens"] == ["hand"]
+    assert "more" in details[0]["ignored_low_information_tokens"]
+    assert "something" in details[0]["ignored_low_information_tokens"]
+    assert all(token not in {"gett", "someth"} for token in details[0]["matched_tokens"])
+
+
 def test_retrieval_can_surface_an_open_thread_when_topic_is_relevant():
     beliefs = [{
         "topic_key": "country_residence_decision",
