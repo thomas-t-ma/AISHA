@@ -415,3 +415,36 @@ turn; pull the model and restart Core to re-enable it.
 Use **Test conversation** mode when tuning thresholds or trying synthetic
 paraphrases. Recall remains active while those test turns are prevented from
 creating or revising learned beliefs.
+
+
+### Synthetic multi-memory benchmark
+
+A standalone benchmark exercises the production lexical + embedding + relevance
+gate stack against a synthetic 12-memory bank. It does **not** open AISHA's
+SQLite database and does not read or write personal memories.
+
+The suite currently includes direct lexical matches, semantic paraphrases,
+same-thread updates/contradictions, a two-memory turn, hard thematic negatives,
+and unrelated negatives. It reports exact-case accuracy, micro precision/recall,
+negative-control accuracy, retrieval methods, semantic candidate decisions, and
+retrieval latency.
+
+With Ollama running and the profile models already pulled:
+
+```bash
+cd services/aisha-core
+source .venv/bin/activate
+python scripts/benchmark_memory_recall.py \
+  --output /tmp/aisha-memory-recall-benchmark.json
+```
+
+Run one case while debugging:
+
+```bash
+python scripts/benchmark_memory_recall.py --case patient_contact_paraphrase
+```
+
+The benchmark is intentionally synthetic so threshold/reranker experiments
+cannot contaminate AISHA's real autobiographical memory. A failure is not
+automatically a reason to loosen thresholds; inspect whether it was a lexical
+false positive, embedding miss, candidate-floor miss, or relevance-gate error.
