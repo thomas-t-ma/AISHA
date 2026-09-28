@@ -292,6 +292,24 @@ export default function App() {
   }
 
   const currentRun = runs.find((run) => run.run_id === selectedRunId) ?? runs.at(-1);
+  const currentTurnStarted = currentRun
+    ? events.slice().reverse().find((event) =>
+        event.type === 'aisha.turn.started' && event.turn_id === currentRun.turn_id)
+    : undefined;
+  const recallCount = numeric(currentTurnStarted?.payload.memory_recall_count) ?? 0;
+  const recallTopics = Array.isArray(currentTurnStarted?.payload.memory_recall_topics)
+    ? currentTurnStarted.payload.memory_recall_topics.filter(
+        (topic): topic is string => typeof topic === 'string',
+      )
+    : [];
+  const recallDetails = Array.isArray(currentTurnStarted?.payload.memory_recall_details)
+    ? currentTurnStarted.payload.memory_recall_details.filter(
+        (detail): detail is Record<string, unknown> =>
+          typeof detail === 'object' && detail !== null,
+      )
+    : [];
+  const visibleEvents = events.filter((event) => event.type !== 'aisha.assistant.text_delta');
+  const hiddenDeltaCount = events.length - visibleEvents.length;
   const statusText = connection === 'online' ? 'Connected' : connection === 'connecting'
     ? 'Connecting' : 'Disconnected';
 
@@ -469,6 +487,31 @@ export default function App() {
                           <div><span>Characters</span><strong>{currentRun.output_chars}</strong></div>
                           <div><span>Output tokens</span><strong>{String(currentRun.backend_metrics.output_tokens ?? '—')}</strong></div>
                         </div>
+                        <div className="small-label metrics-label">MEMORY RECALL</div>
+                        <dl className="timing-rows">
+                          <div><dt>Retrieved beliefs</dt><dd>{recallCount}</dd></div>
+                          <div>
+                            <dt>Topics</dt>
+                            <dd>{recallTopics.length ? recallTopics.join(', ') : 'None'}</dd>
+                          </div>
+                          {recallDetails.map((detail, index) => (
+                            <div key={String(detail.topic_key ?? index)}>
+                              <dt>{String(detail.topic_key ?? 'Match')}</dt>
+                              <dd>
+                                {String(detail.method ?? 'unknown')}
+                                {' · score '}{String(detail.score ?? '—')}
+                                {' · tokens '}
+                                {Array.isArray(detail.matched_tokens)
+                                  ? detail.matched_tokens.join(', ') || 'none'
+                                  : 'none'}
+                                {Array.isArray(detail.ignored_low_information_tokens)
+                                  && detail.ignored_low_information_tokens.length
+                                  ? ' · ignored ' + detail.ignored_low_information_tokens.join(', ')
+                                  : ''}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
                         <div className="small-label metrics-label">OLLAMA BREAKDOWN</div>
                         <dl className="timing-rows">
                           <div><dt>Model load</dt><dd>{millis(numeric(currentRun.backend_metrics.load_ms))}</dd></div>
@@ -486,10 +529,15 @@ export default function App() {
               </div>
             ) : (
               <div className="event-list">
-                {events.length === 0 ? (
-                  <div className="empty-records">No persisted events in this session yet.</div>
+                {hiddenDeltaCount > 0 && (
+                  <div className="empty-records">
+                    {hiddenDeltaCount.toLocaleString()} streaming text delta events hidden.
+                  </div>
+                )}
+                {visibleEvents.length === 0 ? (
+                  <div className="empty-records">No persisted control events in this session yet.</div>
                 ) : (
-                  events.slice(-100).reverse().map((event, index) => (
+                  visibleEvents.slice(-100).reverse().map((event, index) => (
                     <details className="event-entry" key={event.turn_id + ':' + index}>
                       <summary>
                         <span className="event-dot" />

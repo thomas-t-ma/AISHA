@@ -30,6 +30,11 @@ class ConversationProvider:
         yield LLMStreamChunk(text="I see.")
 
 
+class AlwaysApproveEvidence:
+    async def check(self, action: dict) -> tuple[bool, str]:
+        return True, "supported"
+
+
 class ReflectionProbe:
     def __init__(self) -> None:
         self.seen_user_text: list[str] = []
@@ -72,7 +77,8 @@ async def test_autonomous_memory_forms_revises_and_forgets_across_sessions(tmp_p
     reflector = ReflectionProbe()
     persona = load_persona(Settings(aisha_profile="mock").character_dir)
     orch = AISHAOrchestrator(
-        store, persona, provider, ledger=ledger, reflector=reflector
+        store, persona, provider, ledger=ledger, reflector=reflector,
+        evidence_verifier=AlwaysApproveEvidence(),
     )
     first = await store.create_session()
     events = [
@@ -107,7 +113,8 @@ async def test_autonomous_memory_forms_revises_and_forgets_across_sessions(tmp_p
 
     third = await store.create_session()
     _ = [event async for event in orch.stream_user_turn(third, "Hello again.")]
-    assert "Thomas decided to stay" in provider.prompts[-1]
+    # Verified memory exists, but an unrelated greeting should not retrieve it.
+    assert "Thomas decided to stay" not in provider.prompts[-1]
     await orch.wait_for_reflections()
     assert reflector.seen_user_text[-1] == "Hello again."
     assert orch.memory_status()["last_result"]["outcome"] == "no_candidate"

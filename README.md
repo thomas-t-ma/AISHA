@@ -246,3 +246,71 @@ Studio retains the original rejection alongside a separate recovery outcome
 saved, while the original rejected proposal remains counted as rejected.
 This does not backfill previously failed reflections or guarantee that the
 local model will always find a useful independent memory.
+
+
+## Contextual recall v1 (experimental)
+
+AISHA no longer injects every recent learned belief into every turn. Before a
+reply, Core now considers up to 50 learned beliefs, excludes every
+`legacy_unchecked` entry, and selects at most four **verified** beliefs whose
+topic/text/open question shares substantive terms with the current user
+message. The selected topics are recorded on the `aisha.turn.started` event as
+`memory_recall_topics` for debugging.
+
+This first retrieval pass intentionally favors precision over recall: it is a
+small local lexical ranker, not embeddings or another pre-response LLM call.
+That keeps first-token latency unchanged and prevents unrelated memories from
+being sprayed into the prompt. It can miss semantic relationships expressed
+with completely different vocabulary; semantic/vector retrieval is a future
+upgrade.
+
+When recalled, verified beliefs are presented as fallible continuity context.
+The chat model is told to let genuinely relevant history influence the response
+naturally, not to announce memory access, recite stored facts, or force
+follow-up questions. Unresolved questions may be revisited only when the
+current message already engages that topic.
+
+Manual user-authored memories retain their existing behavior. Legacy learned
+beliefs remain visible in Studio and their revision history is unchanged, but
+they are no longer active conversational knowledge until separately reconciled.
+
+
+### Studio recall observability
+
+Studio's event log now hides per-token `aisha.assistant.text_delta` records from
+the default event list so lifecycle events such as `turn.started` remain visible.
+The selected model-run detail also shows the recalled memory count and topic keys
+directly. The underlying delta events are still persisted in SQLite.
+
+The event API now returns the newest requested records (restored to chronological
+order) rather than the oldest records in a long session. Studio asks for the
+latest 2,000 events, preventing normal streaming traffic from starving recent
+turn diagnostics.
+
+
+### Recall match diagnostics
+
+Each `aisha.turn.started` event now includes `memory_recall_details` for every
+retrieved learned belief: the retrieval method, score, and normalized lexical
+tokens that caused the match. Studio exposes the same details in Model runs.
+This is diagnostic metadata only; it is not added to AISHA's conversation
+prompt.
+
+The current lexical retriever cannot infer semantic similarity without shared
+normalized tokens. A paraphrase such as "spending my day away from the people
+I'm supposed to be helping" is therefore a deliberate zero-recall baseline for
+the verified `job_patient_interaction_level` memory unless the actual prompt or
+stored belief contains overlapping terms.
+
+
+### Lexical recall precision
+
+The lexical ranker now ignores low-information conversational overlap such as
+`more`, `think`, `something`, and `getting` when deciding whether a belief
+is relevant. It also no longer strips `-ing` / `-ed` suffixes naively; that
+normalizer had produced artifacts such as `something -> someth` and
+`getting -> gett`. Simple plural normalization remains.
+
+Recall diagnostics distinguish the tokens that actually justified selection
+from low-information overlap that was ignored. A belief is not retrieved when
+its only shared words with the current turn are low-information terms.
