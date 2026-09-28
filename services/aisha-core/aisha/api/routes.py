@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
 from typing import Literal
 
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(prefix="/v1")
