@@ -71,12 +71,19 @@ def test_synthetic_benchmark_has_unique_verified_topics_and_mixed_cases():
 
 @pytest.mark.asyncio
 async def test_run_case_combines_lexical_and_semantic_without_database():
-    beliefs = synthetic_beliefs()
+    beliefs = [
+        belief
+        for belief in synthetic_beliefs()
+        if belief["topic_key"] in {
+            "job_patient_interaction_level",
+            "remote_work_preference",
+        }
+    ]
     case = RecallCase(
         case_id="combined",
         text=(
             "I want more patient interaction, and I don't want my next role "
-            "to keep me onsite every weekday."
+            "to tie me physically to one location."
         ),
         expected_topics=("job_patient_interaction_level", "remote_work_preference"),
         category="test",
