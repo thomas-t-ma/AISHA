@@ -13,7 +13,7 @@ from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.quotes import original_source_quote
 from aisha.memory.reflector import OllamaReflector
-from aisha.memory.retrieval import select_relevant_beliefs
+from aisha.memory.retrieval import explain_relevant_beliefs
 from aisha.providers.base import AISHAProviderError
 from aisha.storage.database import AISHAStore
 
@@ -273,7 +273,8 @@ class AISHAOrchestrator:
         learned_beliefs = (
             await self.ledger.list_beliefs(limit=50) if self.ledger is not None else []
         )
-        recalled_beliefs = select_relevant_beliefs(text, learned_beliefs, limit=4)
+        recall_details = explain_relevant_beliefs(text, learned_beliefs, limit=4)
+        recalled_beliefs = [detail["belief"] for detail in recall_details]
         memory_lines: list[str] = []
         remaining = 2400
         for memory in approved_memories:
@@ -352,6 +353,15 @@ class AISHAOrchestrator:
                 "memory_recall_count": len(recalled_beliefs),
                 "memory_recall_topics": [
                     belief["topic_key"] for belief in recalled_beliefs
+                ],
+                "memory_recall_details": [
+                    {
+                        "topic_key": detail["belief"]["topic_key"],
+                        "method": detail["method"],
+                        "score": detail["score"],
+                        "matched_tokens": detail["matched_tokens"],
+                    }
+                    for detail in recall_details
                 ],
             },
         )

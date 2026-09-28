@@ -302,6 +302,12 @@ export default function App() {
         (topic): topic is string => typeof topic === 'string',
       )
     : [];
+  const recallDetails = Array.isArray(currentTurnStarted?.payload.memory_recall_details)
+    ? currentTurnStarted.payload.memory_recall_details.filter(
+        (detail): detail is Record<string, unknown> =>
+          typeof detail === 'object' && detail !== null,
+      )
+    : [];
   const visibleEvents = events.filter((event) => event.type !== 'aisha.assistant.text_delta');
   const hiddenDeltaCount = events.length - visibleEvents.length;
   const statusText = connection === 'online' ? 'Connected' : connection === 'connecting'
@@ -488,6 +494,19 @@ export default function App() {
                             <dt>Topics</dt>
                             <dd>{recallTopics.length ? recallTopics.join(', ') : 'None'}</dd>
                           </div>
+                          {recallDetails.map((detail, index) => (
+                            <div key={String(detail.topic_key ?? index)}>
+                              <dt>{String(detail.topic_key ?? 'Match')}</dt>
+                              <dd>
+                                {String(detail.method ?? 'unknown')}
+                                {' · score '}{String(detail.score ?? '—')}
+                                {' · tokens '}
+                                {Array.isArray(detail.matched_tokens)
+                                  ? detail.matched_tokens.join(', ') || 'none'
+                                  : 'none'}
+                              </dd>
+                            </div>
+                          ))}
                         </dl>
                         <div className="small-label metrics-label">OLLAMA BREAKDOWN</div>
                         <dl className="timing-rows">

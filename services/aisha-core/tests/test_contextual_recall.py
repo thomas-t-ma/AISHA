@@ -8,7 +8,7 @@ from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.contracts.turns import TurnContext
 from aisha.memory.ledger import ExperienceLedger
-from aisha.memory.retrieval import select_relevant_beliefs
+from aisha.memory.retrieval import explain_relevant_beliefs, select_relevant_beliefs
 from aisha.providers.base import LLMStreamChunk
 from aisha.settings import Settings
 from aisha.storage.database import AISHAStore
@@ -94,6 +94,19 @@ def test_retrieval_only_considers_verified_and_relevant_beliefs():
     assert select_relevant_beliefs("What should I cook tonight?", beliefs) == []
     assert select_relevant_beliefs("Tell me about my Emory employment.", beliefs) == []
 
+    semantic_paraphrase = (
+        "I'm getting tired of spending so much of my day away from the people "
+        "I'm supposed to be helping. I think I'd enjoy something more hands-on."
+    )
+    assert select_relevant_beliefs(semantic_paraphrase, beliefs) == []
+
+    details = explain_relevant_beliefs(
+        "I want more patient interaction in my work.", beliefs
+    )
+    assert details[0]["method"] == "lexical"
+    assert details[0]["matched_tokens"] == ["interaction", "patient"]
+    assert details[0]["score"] > 0
+
 
 def test_retrieval_can_surface_an_open_thread_when_topic_is_relevant():
     beliefs = [{
@@ -162,6 +175,10 @@ async def test_prompt_injects_only_relevant_verified_continuity_memory(tmp_path)
     assert started.payload["memory_recall_count"] == 1
     assert started.payload["memory_recall_topics"] == [
         "job_patient_interaction_level"
+    ]
+    assert started.payload["memory_recall_details"][0]["method"] == "lexical"
+    assert started.payload["memory_recall_details"][0]["matched_tokens"] == [
+        "interaction", "patient"
     ]
 
 

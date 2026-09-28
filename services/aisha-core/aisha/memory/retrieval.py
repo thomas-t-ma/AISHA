@@ -37,17 +37,13 @@ def _belief_tokens(belief: dict) -> tuple[set[str], set[str], set[str]]:
     return topic, text, question
 
 
-def select_relevant_beliefs(
+def explain_relevant_beliefs(
     user_text: str,
     beliefs: list[dict],
     *,
     limit: int = 4,
 ) -> list[dict]:
-    """Return only verified beliefs with lexical evidence of current relevance.
-
-    This intentionally favors precision over recall. Semantic/vector retrieval can
-    replace this ranker later without changing the prompt contract.
-    """
+    """Return selected beliefs plus transparent lexical match diagnostics."""
     query = set(_tokens(user_text))
     if not query:
         return []
@@ -82,12 +78,32 @@ def select_relevant_beliefs(
             if token in question:
                 score += 1.25 * rarity
 
-        # Two independent shared concepts are substantially more convincing
-        # than a single generic word.
         if len(overlap) >= 2:
             score += 1.5
 
-        ranked.append((score, str(belief.get("updated_at", "")), belief))
+        ranked.append((
+            score,
+            str(belief.get("updated_at", "")),
+            {
+                "belief": belief,
+                "method": "lexical",
+                "score": round(score, 4),
+                "matched_tokens": sorted(overlap),
+            },
+        ))
 
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
-    return [belief for _score, _updated, belief in ranked[:max(1, limit)]]
+    return [detail for _score, _updated, detail in ranked[:max(1, limit)]]
+
+
+def select_relevant_beliefs(
+    user_text: str,
+    beliefs: list[dict],
+    *,
+    limit: int = 4,
+) -> list[dict]:
+    """Return only verified beliefs with lexical evidence of current relevance."""
+    return [
+        detail["belief"]
+        for detail in explain_relevant_beliefs(user_text, beliefs, limit=limit)
+    ]
