@@ -564,6 +564,18 @@ export default function App() {
                         <dl className="timing-rows">
                           <div><dt>Retrieved beliefs</dt><dd>{recallCount}</dd></div>
                           <div>
+                            <dt>Retrieval latency</dt>
+                            <dd>{millis(numeric(currentTurnStarted?.payload.memory_retrieval_ms))}</dd>
+                          </div>
+                          <div>
+                            <dt>Lexical stage</dt>
+                            <dd>{millis(numeric(currentTurnStarted?.payload.lexical_retrieval_ms))}</dd>
+                          </div>
+                          <div>
+                            <dt>Semantic stage</dt>
+                            <dd>{millis(numeric(currentTurnStarted?.payload.semantic_retrieval_ms))}</dd>
+                          </div>
+                          <div>
                             <dt>Learning</dt>
                             <dd>{currentTurnStarted?.payload.memory_learning_enabled === false
                               ? 'Off (test mode)' : 'On'}</dd>

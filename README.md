@@ -393,6 +393,20 @@ This keeps low-similarity controls such as unrelated food questions cheap while
 allowing indirect paraphrases to be recovered without globally lowering the
 final semantic safety threshold.
 
+
+### Recall latency diagnostics
+
+Each `aisha.turn.started` payload records:
+
+- `memory_retrieval_ms`: total learned-memory retrieval time before generation;
+- `lexical_retrieval_ms`: deterministic lexical stage time;
+- `semantic_retrieval_ms`: embedding plus any second-stage relevance-gate time.
+
+Studio shows the same values under Memory Recall. This makes pre-generation
+memory cost visible separately from the provider's first-token latency. When a
+semantic memory is accepted by the second-stage gate, its `reranker_reason`
+is also preserved in the per-memory recall diagnostics.
+
 Semantic retrieval fails open: if embedding generation is unavailable, normal
 chat and lexical recall continue. A missing embedding model disables semantic
 recall for that Core process after the first 404 rather than retrying on every

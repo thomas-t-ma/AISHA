@@ -27,8 +27,9 @@ class PromptProbe:
 
 
 class SemanticProbe:
-    def __init__(self, topic_key: str) -> None:
+    def __init__(self, topic_key: str, *, reranked: bool = False) -> None:
         self.topic_key = topic_key
+        self.reranked = reranked
         self.calls: list[dict] = []
 
     async def recall(
@@ -47,13 +48,16 @@ class SemanticProbe:
         belief = next(b for b in beliefs if b["topic_key"] == self.topic_key)
         if belief["belief_id"] in (exclude_belief_ids or set()):
             return []
-        return [{
+        detail = {
             "belief": belief,
-            "method": "semantic",
+            "method": "semantic_reranked" if self.reranked else "semantic",
             "score": 0.84,
             "matched_tokens": [],
             "ignored_low_information_tokens": [],
-        }]
+        }
+        if self.reranked:
+            detail["reranker_reason"] = "same underlying concern"
+        return [detail]
 
     def status(self) -> dict:
         return {
@@ -441,6 +445,9 @@ async def test_semantic_recall_fills_gap_after_lexical_retrieval(tmp_path):
         "ignored_low_information_tokens": [],
     }]
     assert started.payload["semantic_recall_status"]["enabled"] is True
+    assert started.payload["memory_retrieval_ms"] >= 0
+    assert started.payload["lexical_retrieval_ms"] >= 0
+    assert started.payload["semantic_retrieval_ms"] >= 0
     assert semantic.calls[0]["exclude_belief_ids"] == set()
     assert patient["belief_id"] not in semantic.calls[0]["exclude_belief_ids"]
 
@@ -479,3 +486,40 @@ async def test_lexical_match_wins_and_semantic_retrieval_cannot_duplicate_it(tmp
     assert started.payload["memory_recall_count"] == 1
     assert started.payload["memory_recall_details"][0]["method"] == "lexical"
     assert semantic.calls[0]["exclude_belief_ids"] == {patient["belief_id"]}
+
+
+@pytest.mark.asyncio
+async def test_turn_started_preserves_reranker_reason_in_recall_diagnostics(tmp_path):
+    store = AISHAStore(tmp_path / "reranked.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    await add_belief(
+        ledger,
+        topic="job_patient_interaction_level",
+        text="The user's current job involves little patient interaction.",
+        quote="My current job doesn't have much patient interaction.",
+        verified=True,
+    )
+
+    provider = PromptProbe()
+    semantic = SemanticProbe("job_patient_interaction_level", reranked=True)
+    orch = AISHAOrchestrator(
+        store,
+        load_persona(Settings(aisha_profile="mock").character_dir),
+        provider,
+        ledger=ledger,
+        semantic_retriever=semantic,
+    )
+    session = await store.create_session()
+    events = [
+        event async for event in orch.stream_user_turn(
+            session,
+            "I want something more hands-on with the people I'm helping.",
+        )
+    ]
+
+    started = next(event for event in events if event.type == "aisha.turn.started")
+    detail = started.payload["memory_recall_details"][0]
+    assert detail["method"] == "semantic_reranked"
+    assert detail["reranker_reason"] == "same underlying concern"

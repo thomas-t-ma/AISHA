@@ -286,19 +286,29 @@ class AISHAOrchestrator:
         learned_beliefs = (
             await self.ledger.list_beliefs(limit=50) if self.ledger is not None else []
         )
+        retrieval_started = perf_counter()
+        lexical_started = perf_counter()
         lexical_details = explain_relevant_beliefs(text, learned_beliefs, limit=4)
+        lexical_retrieval_ms = round((perf_counter() - lexical_started) * 1000, 3)
+
         semantic_details: list[dict] = []
+        semantic_retrieval_ms = 0.0
         if self.semantic_retriever is not None and len(lexical_details) < 4:
             lexical_ids = {
                 str(detail["belief"].get("belief_id", ""))
                 for detail in lexical_details
             }
+            semantic_started = perf_counter()
             semantic_details = await self.semantic_retriever.recall(
                 text,
                 learned_beliefs,
                 exclude_belief_ids=lexical_ids,
                 remaining_limit=4 - len(lexical_details),
             )
+            semantic_retrieval_ms = round(
+                (perf_counter() - semantic_started) * 1000, 3
+            )
+        memory_retrieval_ms = round((perf_counter() - retrieval_started) * 1000, 3)
         recall_details = lexical_details + semantic_details
         recalled_beliefs = [detail["belief"] for detail in recall_details]
         memory_lines: list[str] = []
@@ -389,11 +399,19 @@ class AISHAOrchestrator:
                         "ignored_low_information_tokens": detail[
                             "ignored_low_information_tokens"
                         ],
+                        **(
+                            {"reranker_reason": detail["reranker_reason"]}
+                            if detail.get("reranker_reason")
+                            else {}
+                        ),
                     }
                     for detail in recall_details
                 ],
                 "memory_mode": memory_mode,
                 "memory_learning_enabled": memory_learning_enabled,
+                "memory_retrieval_ms": memory_retrieval_ms,
+                "lexical_retrieval_ms": lexical_retrieval_ms,
+                "semantic_retrieval_ms": semantic_retrieval_ms,
                 "semantic_recall_status": (
                     self.semantic_retriever.status()
                     if self.semantic_retriever is not None
