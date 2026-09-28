@@ -12,15 +12,28 @@ to the user's CURRENT message.
 Return ONLY JSON:
 {"decisions":[{"index":0,"relevant":true|false,"reason":"short explanation"}]}
 
-Relevant means the current message and memory concern the same underlying
+Relevant means the CURRENT message is actually about the user's same underlying
 personal situation, decision, preference, goal, relationship, problem, or
-unresolved thread. They may use very different wording. A current message may
-also contradict, update, question, or indirectly describe the same situation.
+unresolved thread. Different wording is fine. A current message may contradict,
+update, question, or indirectly describe that same personal thread.
 
-Reject merely topical, generic, or associative similarity. Shared ideas such as
-work, people, food, feelings, time, or wanting something are not enough by
-themselves. Do not force a callback merely because a memory could be mentioned.
-If recalling the memory would not materially improve the response, reject it.
+Be strict about PERSONAL CONTINUITY:
+- A general informational question is not personal continuity merely because it
+  shares words with a memory. Example: asking how medical-school accreditation
+  works does NOT make a personal medical-school application goal relevant.
+- A broader category is not enough. A keyboard question does NOT automatically
+  make a general preference about computer-component quality relevant.
+- A healthcare or AI question does NOT automatically make every healthcare,
+  school, or research memory relevant.
+- For multi-topic messages, approve each memory only if that specific personal
+  thread is independently present in the current message.
+
+Reject merely topical, generic, adjacent, or associative similarity. Shared
+ideas such as work, people, food, computers, healthcare, school, projects,
+feelings, time, or wanting something are not enough by themselves. Do not force
+a callback merely because a memory could be mentioned. Ask: would omitting this
+specific memory lose useful continuity about what the user is personally
+talking about right now? If not, reject it.
 
 Judge RELEVANCE only. Do not decide whether the memory is true, current, or
 factually verified; another subsystem handles evidence integrity. If uncertain,
@@ -103,7 +116,9 @@ class OllamaMemoryRelevanceGate:
                 "topic_key": candidate["belief"].get("topic_key"),
                 "memory": candidate["belief"].get("text"),
                 "open_question": candidate["belief"].get("open_question"),
-                "embedding_score": candidate.get("score"),
+                "embedding_score": candidate.get("semantic_score", candidate.get("score")),
+                "lexical_score": candidate.get("lexical_score"),
+                "candidate_sources": candidate.get("candidate_sources"),
             }
             for index, candidate in enumerate(candidates)
         ]
@@ -113,7 +128,7 @@ class OllamaMemoryRelevanceGate:
             "think": False,
             "options": {
                 "temperature": 0,
-                "num_predict": 220,
+                "num_predict": 420,
                 "num_ctx": 4096,
             },
             "messages": [

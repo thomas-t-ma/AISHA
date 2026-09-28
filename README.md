@@ -363,10 +363,10 @@ situation phrased differently, while avoiding merely topical associations.
 
 Belief vectors are cached in-process by belief ID/revision/content; after the
 first comparison, subsequent turns normally embed only the new instructed
-query. The default semantic cosine-similarity threshold remains `0.72`, with
-at most two semantic additions and at most four total learned memories per
-turn. We intentionally improve the representation before relaxing the
-selection threshold.
+query. The `0.72` semantic threshold remains for the older semantic-only
+compatibility path, but production hybrid recall no longer auto-accepts a
+memory based on cosine score alone. The `0.30` floor controls semantic
+candidate generation; the final relevance gate decides prompt injection.
 
 Recall diagnostics retain the retrieval method. A semantic match appears as
 `method: "semantic"` with its cosine score and no lexical match tokens. Studio
@@ -374,24 +374,31 @@ also shows the configured embedding model and any semantic-retrieval error.
 For threshold tuning, the turn status records the top semantic candidates even
 when they are not selected.
 
-Semantic recall now uses two stages:
+Hybrid recall now separates **candidate generation** from **final selection**:
 
-- scores below `0.30` are discarded immediately and do not trigger another
-  model call;
-- scores at or above `0.72` are accepted directly;
-- scores from `0.30` through `0.72` are sent in one small batch to a strict
-  relevance gate using the already-loaded conversational Ollama model.
+- the lexical ranker proposes high-overlap candidates;
+- the embedding model proposes semantic candidates at or above the `0.30`
+  candidate floor;
+- duplicate lexical/semantic candidates are merged;
+- the union is sent in one batch to the strict relevance gate;
+- only memories accepted by that final gate are injected into AISHA's prompt.
 
-The relevance gate judges only whether the candidate memory concerns the same
-underlying personal situation, decision, preference, goal, relationship,
-problem, or unresolved thread. It is explicitly told to reject merely topical
-or generic associations and does not re-judge memory truth/evidence. If the
-gate fails or returns malformed output, the candidate is rejected while chat
-continues normally.
+Lexical overlap is therefore evidence for candidacy, not automatic permission
+to recall. This specifically prevents generic questions such as "How does
+medical-school accreditation work?" from recalling a personal medical-school
+goal merely because the words overlap.
 
-This keeps low-similarity controls such as unrelated food questions cheap while
-allowing indirect paraphrases to be recovered without globally lowering the
-final semantic safety threshold.
+The relevance gate judges whether the CURRENT message is actually about the
+same underlying personal situation, decision, preference, goal, relationship,
+problem, or unresolved thread. It is explicitly told to reject broad topical
+adjacency such as keyboard -> general computer preferences, healthcare AI ->
+every healthcare memory, or a general factual question -> a similarly named
+personal goal. It does not re-judge memory truth/evidence. If the gate fails or
+returns malformed output, candidates are rejected while chat continues normally.
+
+Low-similarity semantic items still remain cheap because embeddings below
+`0.30` never enter the final gate unless they were independently proposed by
+the lexical stage.
 
 
 ### Recall latency diagnostics
@@ -426,8 +433,8 @@ SQLite database and does not read or write personal memories.
 The suite currently includes direct lexical matches, semantic paraphrases,
 same-thread updates/contradictions, a two-memory turn, hard thematic negatives,
 and unrelated negatives. It reports exact-case accuracy, micro precision/recall,
-negative-control accuracy, retrieval methods, semantic candidate decisions, and
-retrieval latency.
+negative-control accuracy, final retrieval methods, candidate sources
+(lexical/semantic/both), gate decisions, and retrieval latency.
 
 With Ollama running and the profile models already pulled:
 

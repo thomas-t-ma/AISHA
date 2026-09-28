@@ -97,10 +97,19 @@ async def main() -> None:
             print(f"  expected: {expected}")
             print(f"  actual:   {actual}")
         for candidate in result["semantic_candidates"]:
+            sources = "+".join(candidate.get("candidate_sources") or [])
+            lexical_score = candidate.get("lexical_score")
+            semantic_score = candidate.get("semantic_score")
+            score_parts = []
+            if lexical_score is not None:
+                score_parts.append(f"lex={lexical_score}")
+            if semantic_score is not None:
+                score_parts.append(f"sem={semantic_score}")
             print(
                 "  candidate: "
                 f"{candidate.get('topic_key')} "
-                f"{candidate.get('score')} "
+                f"[{sources or 'semantic'}] "
+                f"{' '.join(score_parts)} "
                 f"{candidate.get('decision')}"
             )
 

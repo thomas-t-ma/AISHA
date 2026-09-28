@@ -234,23 +234,33 @@ async def run_case(
     lexical = explain_relevant_beliefs(case.text, beliefs, limit=total_limit)
     lexical_ms = (perf_counter() - lexical_started) * 1000
 
-    semantic: list[dict] = []
     semantic_ms = 0.0
-    if len(lexical) < total_limit:
-        lexical_ids = {
-            str(detail["belief"].get("belief_id", ""))
-            for detail in lexical
-        }
+    hybrid_recall = getattr(semantic_retriever, "recall_hybrid", None)
+    if callable(hybrid_recall):
         semantic_started = perf_counter()
-        semantic = await semantic_retriever.recall(
+        details = await hybrid_recall(
             case.text,
             beliefs,
-            exclude_belief_ids=lexical_ids,
-            remaining_limit=total_limit - len(lexical),
+            lexical_candidates=lexical,
+            total_limit=total_limit,
         )
         semantic_ms = (perf_counter() - semantic_started) * 1000
-
-    details = lexical + semantic
+    else:
+        semantic: list[dict] = []
+        if len(lexical) < total_limit:
+            lexical_ids = {
+                str(detail["belief"].get("belief_id", ""))
+                for detail in lexical
+            }
+            semantic_started = perf_counter()
+            semantic = await semantic_retriever.recall(
+                case.text,
+                beliefs,
+                exclude_belief_ids=lexical_ids,
+                remaining_limit=total_limit - len(lexical),
+            )
+            semantic_ms = (perf_counter() - semantic_started) * 1000
+        details = lexical + semantic
     actual_topics = tuple(str(detail["belief"]["topic_key"]) for detail in details)
     expected = set(case.expected_topics)
     actual = set(actual_topics)
@@ -275,6 +285,9 @@ async def run_case(
                 "method": detail["method"],
                 "score": detail.get("score"),
                 "reranker_reason": detail.get("reranker_reason"),
+                "lexical_score": detail.get("lexical_score"),
+                "semantic_score": detail.get("semantic_score"),
+                "candidate_sources": detail.get("candidate_sources"),
             }
             for detail in details
         ],

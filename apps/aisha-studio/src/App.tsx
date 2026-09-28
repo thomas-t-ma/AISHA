@@ -610,10 +610,18 @@ export default function App() {
                           )}
                           {semanticCandidates.map((candidate, index) => (
                             <div key={'semantic-candidate-' + index}>
-                              <dt>Semantic candidate</dt>
+                              <dt>Recall candidate</dt>
                               <dd>
                                 {String(candidate.topic_key ?? 'unknown')}
-                                {' · '}{String(candidate.score ?? '—')}
+                                {candidate.candidate_sources
+                                  ? ' · ' + String(candidate.candidate_sources)
+                                  : ''}
+                                {candidate.lexical_score != null
+                                  ? ' · lex ' + String(candidate.lexical_score)
+                                  : ''}
+                                {candidate.semantic_score != null
+                                  ? ' · sem ' + String(candidate.semantic_score)
+                                  : ''}
                                 {' · '}{String(candidate.decision ?? (
                                   candidate.selected === true ? 'selected' : 'rejected'
                                 ))}
@@ -634,6 +642,15 @@ export default function App() {
                                 {Array.isArray(detail.ignored_low_information_tokens)
                                   && detail.ignored_low_information_tokens.length
                                   ? ' · ignored ' + detail.ignored_low_information_tokens.join(', ')
+                                  : ''}
+                                {Array.isArray(detail.candidate_sources)
+                                  ? ' · sources ' + detail.candidate_sources.join('+')
+                                  : ''}
+                                {detail.lexical_score != null
+                                  ? ' · lex ' + String(detail.lexical_score)
+                                  : ''}
+                                {detail.semantic_score != null
+                                  ? ' · sem ' + String(detail.semantic_score)
                                   : ''}
                                 {detail.reranker_reason
                                   ? ' · gate ' + String(detail.reranker_reason)

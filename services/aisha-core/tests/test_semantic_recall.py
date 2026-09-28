@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-rerank-v2"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v3"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -514,3 +514,151 @@ async def test_relevance_gate_diagnostics_are_cleared_when_next_turn_is_below_fl
     second = await retriever.recall("dessert tonight", [belief])
     assert second == []
     assert retriever.status()["relevance_gate"]["last_decisions"] == []
+
+
+class TopicRelevanceGate:
+    def __init__(self, relevant_topics: set[str]) -> None:
+        self.relevant_topics = relevant_topics
+        self.calls: list[list[dict]] = []
+        self.last_error: str | None = None
+        self.last_decisions: list[dict] = []
+
+    def reset(self) -> None:
+        self.last_error = None
+        self.last_decisions = []
+
+    async def judge(self, user_text: str, candidates: list[dict]) -> list[dict]:
+        self.calls.append(candidates)
+        decisions = []
+        for index, candidate in enumerate(candidates):
+            topic = str(candidate["belief"]["topic_key"])
+            relevant = topic in self.relevant_topics
+            decisions.append({
+                "index": index,
+                "relevant": relevant,
+                "reason": "same personal thread" if relevant else "only generic overlap",
+            })
+        self.last_decisions = decisions
+        return decisions
+
+    def status(self) -> dict:
+        return {
+            "enabled": True,
+            "model": "topic-gate",
+            "last_error": self.last_error,
+            "last_decisions": self.last_decisions,
+        }
+
+
+@pytest.mark.asyncio
+async def test_hybrid_final_gate_can_reject_lexical_false_positive(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "embeddings": [
+                    [1.0, 0.0],
+                    [0.45, 0.55],
+                    [0.35, 0.65],
+                ]
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    patient = verified_belief(
+        "belief_patient",
+        "job_patient_interaction_level",
+        "The user's current job involves little patient interaction.",
+    )
+    remote = verified_belief(
+        "belief_remote",
+        "remote_work_preference",
+        "The user prefers jobs that allow some work from home.",
+    )
+    gate = TopicRelevanceGate({"job_patient_interaction_level"})
+    retriever = OllamaSemanticMemoryRetriever(
+        model="embed",
+        base_url="http://127.0.0.1:11434",
+        candidate_floor=0.30,
+        relevance_gate=gate,
+    )
+
+    lexical_false_positive = [{
+        "belief": remote,
+        "method": "lexical",
+        "score": 3.5,
+        "matched_tokens": ["work"],
+        "ignored_low_information_tokens": [],
+    }]
+    result = await retriever.recall_hybrid(
+        "I wish I spent more time directly helping patients.",
+        [patient, remote],
+        lexical_candidates=lexical_false_positive,
+        total_limit=4,
+    )
+
+    assert [item["belief"]["topic_key"] for item in result] == [
+        "job_patient_interaction_level"
+    ]
+    assert result[0]["method"] == "semantic_reranked"
+    diagnostics = {
+        row["topic_key"]: row for row in retriever.status()["last_candidates"]
+    }
+    assert diagnostics["remote_work_preference"]["decision"] == "reranker_reject"
+    assert diagnostics["job_patient_interaction_level"]["decision"] == "reranker_accept"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_final_gate_deduplicates_lexical_and_semantic_same_belief(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"embeddings": [[1.0, 0.0], [0.50, 0.50]]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    patient = verified_belief(
+        "belief_patient",
+        "job_patient_interaction_level",
+        "The user's current job involves little patient interaction.",
+    )
+    gate = TopicRelevanceGate({"job_patient_interaction_level"})
+    retriever = OllamaSemanticMemoryRetriever(
+        model="embed",
+        base_url="http://127.0.0.1:11434",
+        candidate_floor=0.30,
+        relevance_gate=gate,
+    )
+    lexical = [{
+        "belief": patient,
+        "method": "lexical",
+        "score": 8.5,
+        "matched_tokens": ["interaction", "patient"],
+        "ignored_low_information_tokens": [],
+    }]
+
+    result = await retriever.recall_hybrid(
+        "I want more patient interaction.",
+        [patient],
+        lexical_candidates=lexical,
+    )
+
+    assert len(result) == 1
+    assert result[0]["method"] == "hybrid_reranked"
+    assert result[0]["candidate_sources"] == ["lexical", "semantic"]
+    assert len(gate.calls) == 1
+    assert len(gate.calls[0]) == 1

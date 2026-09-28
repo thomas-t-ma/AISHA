@@ -291,25 +291,38 @@ class AISHAOrchestrator:
         lexical_details = explain_relevant_beliefs(text, learned_beliefs, limit=4)
         lexical_retrieval_ms = round((perf_counter() - lexical_started) * 1000, 3)
 
-        semantic_details: list[dict] = []
         semantic_retrieval_ms = 0.0
-        if self.semantic_retriever is not None and len(lexical_details) < 4:
-            lexical_ids = {
-                str(detail["belief"].get("belief_id", ""))
-                for detail in lexical_details
-            }
+        hybrid_recall = getattr(self.semantic_retriever, "recall_hybrid", None)
+        if self.semantic_retriever is not None and callable(hybrid_recall):
             semantic_started = perf_counter()
-            semantic_details = await self.semantic_retriever.recall(
+            recall_details = await hybrid_recall(
                 text,
                 learned_beliefs,
-                exclude_belief_ids=lexical_ids,
-                remaining_limit=4 - len(lexical_details),
+                lexical_candidates=lexical_details,
+                total_limit=4,
             )
             semantic_retrieval_ms = round(
                 (perf_counter() - semantic_started) * 1000, 3
             )
+        else:
+            semantic_details: list[dict] = []
+            if self.semantic_retriever is not None and len(lexical_details) < 4:
+                lexical_ids = {
+                    str(detail["belief"].get("belief_id", ""))
+                    for detail in lexical_details
+                }
+                semantic_started = perf_counter()
+                semantic_details = await self.semantic_retriever.recall(
+                    text,
+                    learned_beliefs,
+                    exclude_belief_ids=lexical_ids,
+                    remaining_limit=4 - len(lexical_details),
+                )
+                semantic_retrieval_ms = round(
+                    (perf_counter() - semantic_started) * 1000, 3
+                )
+            recall_details = lexical_details + semantic_details
         memory_retrieval_ms = round((perf_counter() - retrieval_started) * 1000, 3)
-        recall_details = lexical_details + semantic_details
         recalled_beliefs = [detail["belief"] for detail in recall_details]
         memory_lines: list[str] = []
         remaining = 2400
@@ -402,6 +415,21 @@ class AISHAOrchestrator:
                         **(
                             {"reranker_reason": detail["reranker_reason"]}
                             if detail.get("reranker_reason")
+                            else {}
+                        ),
+                        **(
+                            {"lexical_score": detail["lexical_score"]}
+                            if "lexical_score" in detail
+                            else {}
+                        ),
+                        **(
+                            {"semantic_score": detail["semantic_score"]}
+                            if "semantic_score" in detail
+                            else {}
+                        ),
+                        **(
+                            {"candidate_sources": detail["candidate_sources"]}
+                            if "candidate_sources" in detail
                             else {}
                         ),
                     }
