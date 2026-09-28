@@ -114,6 +114,8 @@ class OllamaSemanticMemoryRetriever:
         exclude_belief_ids: set[str] | None = None,
         remaining_limit: int | None = None,
     ) -> list[dict]:
+        if self.relevance_gate is not None:
+            self.relevance_gate.reset()
         if self.disabled_reason is not None:
             self.last_candidates = []
             return []

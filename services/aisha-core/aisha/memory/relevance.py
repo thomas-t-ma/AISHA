@@ -42,6 +42,10 @@ class OllamaMemoryRelevanceGate:
         self.last_error: str | None = None
         self.last_decisions: list[dict] = []
 
+    def reset(self) -> None:
+        self.last_error = None
+        self.last_decisions = []
+
     @staticmethod
     def _parse(raw: str, expected: int) -> list[dict] | None:
         raw = raw.strip()

@@ -251,6 +251,12 @@ class FakeRelevanceGate:
     def __init__(self, relevant: bool) -> None:
         self.relevant = relevant
         self.calls: list[tuple[str, list[dict]]] = []
+        self.last_error: str | None = None
+        self.last_decisions: list[dict] = []
+
+    def reset(self) -> None:
+        self.last_error = None
+        self.last_decisions = []
 
     async def judge(self, user_text: str, candidates: list[dict]) -> list[dict]:
         self.calls.append((user_text, candidates))
@@ -267,8 +273,8 @@ class FakeRelevanceGate:
         return {
             "enabled": True,
             "model": "fake-reranker",
-            "last_error": None,
-            "last_decisions": [],
+            "last_error": self.last_error,
+            "last_decisions": self.last_decisions,
         }
 
 
@@ -463,3 +469,47 @@ async def test_relevance_gate_failure_rejects_candidate_without_breaking_chat(mo
         "reason": "relevance_gate_unavailable",
     }]
     assert "relevance_gate_invalid_response" in (gate.last_error or "")
+
+
+@pytest.mark.asyncio
+async def test_relevance_gate_diagnostics_are_cleared_when_next_turn_is_below_floor(monkeypatch):
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        score = 0.4344 if calls == 1 else 0.1634
+        return httpx.Response(
+            200,
+            json={"embeddings": [[1.0, 0.0], [score, 1.0 - score]]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = FakeRelevanceGate(relevant=True)
+    retriever = OllamaSemanticMemoryRetriever(
+        model="embed",
+        base_url="http://127.0.0.1:11434",
+        threshold=0.72,
+        candidate_floor=0.30,
+        relevance_gate=gate,
+    )
+    belief = verified_belief(
+        "belief_patient",
+        "job_patient_interaction_level",
+        "The user's current job involves little patient interaction.",
+    )
+
+    first = await retriever.recall("hands-on helping work", [belief])
+    assert first
+    gate.last_decisions = [{"index": 0, "relevant": True, "reason": "stale"}]
+
+    second = await retriever.recall("dessert tonight", [belief])
+    assert second == []
+    assert retriever.status()["relevance_gate"]["last_decisions"] == []
