@@ -22,7 +22,7 @@ export function getMessages(sessionId: string): Promise<StoredMessage[]> {
 }
 
 export function getEvents(sessionId: string): Promise<AISHAEvent[]> {
-  return json<AISHAEvent[]>('/v1/sessions/' + encodeURIComponent(sessionId) + '/events?limit=1000');
+  return json<AISHAEvent[]>('/v1/sessions/' + encodeURIComponent(sessionId) + '/events?limit=2000');
 }
 
 export function getRuns(sessionId: string): Promise<ModelRun[]> {

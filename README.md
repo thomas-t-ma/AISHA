@@ -273,3 +273,16 @@ current message already engages that topic.
 Manual user-authored memories retain their existing behavior. Legacy learned
 beliefs remain visible in Studio and their revision history is unchanged, but
 they are no longer active conversational knowledge until separately reconciled.
+
+
+### Studio recall observability
+
+Studio's event log now hides per-token `aisha.assistant.text_delta` records from
+the default event list so lifecycle events such as `turn.started` remain visible.
+The selected model-run detail also shows the recalled memory count and topic keys
+directly. The underlying delta events are still persisted in SQLite.
+
+The event API now returns the newest requested records (restored to chronological
+order) rather than the oldest records in a long session. Studio asks for the
+latest 2,000 events, preventing normal streaming traffic from starving recent
+turn diagnostics.

@@ -269,7 +269,7 @@ class AISHAStore:
                         SELECT event_id, session_id, turn_id, timestamp, source, type, payload_json
                         FROM events
                         WHERE session_id = ?
-                        ORDER BY timestamp ASC
+                        ORDER BY timestamp DESC, rowid DESC
                         LIMIT ?
                         """,
                         (session_id, safe_limit),
@@ -277,6 +277,7 @@ class AISHAStore:
                 )
 
         rows = await asyncio.to_thread(work)
+        rows.reverse()
         return [
             {
                 "event_id": row["event_id"],

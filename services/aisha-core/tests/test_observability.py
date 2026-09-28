@@ -8,6 +8,7 @@ import pytest
 from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.contracts.capabilities import ProviderCapabilities
+from aisha.contracts.events import AISHAEvent
 from aisha.contracts.turns import TurnContext
 from aisha.providers.base import LLMStreamChunk
 from aisha.providers.mock import MockLLMProvider
@@ -85,3 +86,25 @@ async def test_cancelled_turn_is_not_committed_as_assistant_message(tmp_path):
     assert events[-1].type == "aisha.turn.cancelled"
     assert [message.role for message in messages] == ["user"]
     assert runs[0]["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_session_events_limit_returns_latest_records_in_chronological_order(tmp_path):
+    store = AISHAStore(tmp_path / "events.sqlite3")
+    await store.initialize()
+    session_id = await store.create_session()
+
+    for index in range(5):
+        await store.add_event(AISHAEvent(
+            session_id=session_id,
+            turn_id=f"turn_{index}",
+            source="test",
+            type=f"test.event.{index}",
+            payload={"index": index},
+        ))
+
+    latest = await store.session_events(session_id, limit=2)
+    assert [event["type"] for event in latest] == [
+        "test.event.3",
+        "test.event.4",
+    ]
