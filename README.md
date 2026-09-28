@@ -470,6 +470,25 @@ generation, prompt tokens, and output tokens). Gate reasons are intentionally
 limited to terse diagnostics so the judge spends tokens deciding rather than
 writing explanations.
 
+
+Compare multiple relevance-gate models on the exact same cases:
+
+```bash
+python scripts/compare_memory_rerankers.py \
+  --suite smoke \
+  --model qwen3.5:4b \
+  --model qwen3.5:9b-mlx \
+  --model qwen3.5:35b-mlx
+```
+
+The smoke suite contains the three cases that currently best separate gate
+quality: an indirect patient-contact paraphrase, a genuine two-memory work +
+volunteering turn, and a general medical-school question that must not trigger
+personal continuity. Use `--suite full` after a model clears smoke. The
+comparison reports exact accuracy, precision, recall, negative-control
+accuracy, median retrieval/gate latency, max gate latency, and concise failure
+diagnostics for each model.
+
 The benchmark is intentionally synthetic so threshold/reranker experiments
 cannot contaminate AISHA's real autobiographical memory. A failure is not
 automatically a reason to loosen thresholds; inspect whether it was a lexical
