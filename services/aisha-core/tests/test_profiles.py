@@ -24,4 +24,6 @@ def test_m2max_profile_preloads_conversation_model():
     assert profile.memory.semantic_recall is True
     assert profile.memory.embedding_model == "qwen3-embedding:4b"
     assert profile.memory.semantic_threshold == 0.72
+    assert profile.memory.semantic_candidate_floor == 0.30
     assert profile.memory.semantic_limit == 2
+    assert profile.memory.semantic_relevance_gate is True

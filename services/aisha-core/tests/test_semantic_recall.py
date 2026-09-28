@@ -5,6 +5,7 @@ import json
 import httpx
 import pytest
 
+from aisha.memory.relevance import OllamaMemoryRelevanceGate
 from aisha.memory.semantic import OllamaSemanticMemoryRetriever
 
 
@@ -85,8 +86,20 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
     assert first[0]["score"] == pytest.approx(0.92)
     assert first[0]["matched_tokens"] == []
     assert retriever.status()["last_candidates"] == [
-        {"topic_key": "job_patient_interaction_level", "score": 0.92, "selected": True},
-        {"topic_key": "country_residence_decision", "score": 0.10, "selected": False},
+        {
+            "topic_key": "job_patient_interaction_level",
+            "score": 0.92,
+            "selected": True,
+            "decision": "direct_accept",
+            "reason": "embedding_score_above_direct_threshold",
+        },
+        {
+            "topic_key": "country_residence_decision",
+            "score": 0.10,
+            "selected": False,
+            "decision": "below_candidate_floor",
+            "reason": "embedding_score_below_candidate_floor",
+        },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
 
@@ -229,4 +242,224 @@ async def test_semantic_status_exposes_near_miss_below_threshold(monkeypatch):
         "topic_key": "job_patient_interaction_level",
         "score": 0.69,
         "selected": False,
+        "decision": "below_direct_threshold",
+        "reason": "no_relevance_gate_configured",
     }]
+
+
+class FakeRelevanceGate:
+    def __init__(self, relevant: bool) -> None:
+        self.relevant = relevant
+        self.calls: list[tuple[str, list[dict]]] = []
+
+    async def judge(self, user_text: str, candidates: list[dict]) -> list[dict]:
+        self.calls.append((user_text, candidates))
+        return [
+            {
+                "index": index,
+                "relevant": self.relevant,
+                "reason": "same underlying work concern" if self.relevant else "generic association",
+            }
+            for index, _candidate in enumerate(candidates)
+        ]
+
+    def status(self) -> dict:
+        return {
+            "enabled": True,
+            "model": "fake-reranker",
+            "last_error": None,
+            "last_decisions": [],
+        }
+
+
+@pytest.mark.asyncio
+async def test_midrange_semantic_candidate_can_be_accepted_by_relevance_gate(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"embeddings": [[1.0, 0.0], [0.4344, 0.5656]]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = FakeRelevanceGate(relevant=True)
+    retriever = OllamaSemanticMemoryRetriever(
+        model="embed",
+        base_url="http://127.0.0.1:11434",
+        threshold=0.72,
+        candidate_floor=0.30,
+        relevance_gate=gate,
+    )
+    belief = verified_belief(
+        "belief_patient",
+        "job_patient_interaction_level",
+        "The user's current job involves little patient interaction.",
+    )
+
+    result = await retriever.recall(
+        "I want something more hands-on with the people I'm helping.",
+        [belief],
+    )
+    assert len(gate.calls) == 1
+    assert [item["belief"]["belief_id"] for item in result] == ["belief_patient"]
+    assert result[0]["method"] == "semantic_reranked"
+    assert result[0]["reranker_reason"] == "same underlying work concern"
+    assert retriever.status()["last_candidates"][0]["decision"] == "reranker_accept"
+
+
+@pytest.mark.asyncio
+async def test_midrange_semantic_candidate_can_be_rejected_by_relevance_gate(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"embeddings": [[1.0, 0.0], [0.4344, 0.5656]]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = FakeRelevanceGate(relevant=False)
+    retriever = OllamaSemanticMemoryRetriever(
+        model="embed",
+        base_url="http://127.0.0.1:11434",
+        threshold=0.72,
+        candidate_floor=0.30,
+        relevance_gate=gate,
+    )
+    belief = verified_belief(
+        "belief_patient",
+        "job_patient_interaction_level",
+        "The user's current job involves little patient interaction.",
+    )
+
+    assert await retriever.recall("A vaguely related work comment.", [belief]) == []
+    assert retriever.status()["last_candidates"][0]["decision"] == "reranker_reject"
+
+
+@pytest.mark.asyncio
+async def test_below_candidate_floor_does_not_call_relevance_gate(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"embeddings": [[1.0, 0.0], [0.1634, 0.8366]]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = FakeRelevanceGate(relevant=True)
+    retriever = OllamaSemanticMemoryRetriever(
+        model="embed",
+        base_url="http://127.0.0.1:11434",
+        threshold=0.72,
+        candidate_floor=0.30,
+        relevance_gate=gate,
+    )
+    belief = verified_belief(
+        "belief_patient",
+        "job_patient_interaction_level",
+        "The user's current job involves little patient interaction.",
+    )
+
+    assert await retriever.recall("What is a good dessert to make tonight?", [belief]) == []
+    assert gate.calls == []
+    assert retriever.status()["last_candidates"][0]["decision"] == "below_candidate_floor"
+
+
+@pytest.mark.asyncio
+async def test_ollama_relevance_gate_parses_strict_batch_json(monkeypatch):
+    requests: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        requests.append(payload)
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "content": json.dumps({
+                        "decisions": [{
+                            "index": 0,
+                            "relevant": True,
+                            "reason": "same underlying patient-contact concern",
+                        }]
+                    })
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = OllamaMemoryRelevanceGate(
+        model="qwen3.5:35b-mlx",
+        base_url="http://127.0.0.1:11434",
+        keep_alive="30m",
+    )
+    candidate = {
+        "belief": verified_belief(
+            "belief_patient",
+            "job_patient_interaction_level",
+            "The user's current job involves little patient interaction.",
+        ),
+        "score": 0.4344,
+    }
+    decisions = await gate.judge(
+        "I want work that feels more hands-on with the people I'm helping.",
+        [candidate],
+    )
+
+    assert decisions[0]["relevant"] is True
+    assert requests[0]["think"] is False
+    assert requests[0]["options"]["temperature"] == 0
+    assert requests[0]["keep_alive"] == "30m"
+
+
+@pytest.mark.asyncio
+async def test_relevance_gate_failure_rejects_candidate_without_breaking_chat(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"message": {"content": "not json"}})
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = OllamaMemoryRelevanceGate(
+        model="qwen3.5:35b-mlx",
+        base_url="http://127.0.0.1:11434",
+    )
+    decisions = await gate.judge(
+        "current message",
+        [{"belief": verified_belief("b1", "topic", "memory"), "score": 0.4}],
+    )
+    assert decisions == [{
+        "index": 0,
+        "relevant": False,
+        "reason": "relevance_gate_unavailable",
+    }]
+    assert "relevance_gate_invalid_response" in (gate.last_error or "")

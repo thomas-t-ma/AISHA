@@ -19,7 +19,9 @@ memory:
   embedding_base_url: http://127.0.0.1:11434
   embedding_keep_alive: 30m
   semantic_threshold: 0.72
+  semantic_candidate_floor: 0.30
   semantic_limit: 2
+  semantic_relevance_gate: true
   semantic_query_instruction: >-
     Given a user's current message, retrieve a previously stated personal memory
     that is directly relevant and useful for responding. Prefer the same

@@ -355,6 +355,12 @@ export default function App() {
           typeof candidate === 'object' && candidate !== null,
       )
     : [];
+  const relevanceGateStatus = (
+    typeof semanticStatus?.relevance_gate === 'object'
+    && semanticStatus.relevance_gate !== null
+  )
+    ? semanticStatus.relevance_gate as Record<string, unknown>
+    : null;
   const visibleEvents = events.filter((event) => event.type !== 'aisha.assistant.text_delta');
   const hiddenDeltaCount = events.length - visibleEvents.length;
   const statusText = connection === 'online' ? 'Connected' : connection === 'connecting'
@@ -574,6 +580,12 @@ export default function App() {
                                 ? 'Off · ' + String(semanticStatus.disabled_reason)
                                 : 'Off'}</dd>
                           </div>
+                          <div>
+                            <dt>Relevance gate</dt>
+                            <dd>{relevanceGateStatus?.enabled === true
+                              ? String(relevanceGateStatus.model ?? 'enabled')
+                              : 'Off'}</dd>
+                          </div>
                           {Boolean(semanticStatus?.last_error) && (
                             <div>
                               <dt>Semantic error</dt>
@@ -586,7 +598,10 @@ export default function App() {
                               <dd>
                                 {String(candidate.topic_key ?? 'unknown')}
                                 {' · '}{String(candidate.score ?? '—')}
-                                {candidate.selected === true ? ' · selected' : ' · below threshold'}
+                                {' · '}{String(candidate.decision ?? (
+                                  candidate.selected === true ? 'selected' : 'rejected'
+                                ))}
+                                {candidate.reason ? ' · ' + String(candidate.reason) : ''}
                               </dd>
                             </div>
                           ))}
@@ -603,6 +618,9 @@ export default function App() {
                                 {Array.isArray(detail.ignored_low_information_tokens)
                                   && detail.ignored_low_information_tokens.length
                                   ? ' · ignored ' + detail.ignored_low_information_tokens.join(', ')
+                                  : ''}
+                                {detail.reranker_reason
+                                  ? ' · gate ' + String(detail.reranker_reason)
                                   : ''}
                               </dd>
                             </div>

@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from aisha.memory.relevance import OllamaMemoryRelevanceGate
+
 logger = logging.getLogger(__name__)
 
 
@@ -18,8 +20,10 @@ class OllamaSemanticMemoryRetriever:
         model: str,
         base_url: str,
         threshold: float = 0.72,
+        candidate_floor: float = 0.30,
         limit: int = 2,
         keep_alive: str | int | None = None,
+        relevance_gate: OllamaMemoryRelevanceGate | None = None,
         query_instruction: str = (
             "Given a user's current message, retrieve a previously stated personal "
             "memory that is directly relevant and useful for responding. Prefer the "
@@ -30,8 +34,10 @@ class OllamaSemanticMemoryRetriever:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.threshold = threshold
+        self.candidate_floor = candidate_floor
         self.limit = max(1, limit)
         self.keep_alive = keep_alive
+        self.relevance_gate = relevance_gate
         self.query_instruction = query_instruction.strip()
         self._belief_vectors: dict[str, list[float]] = {}
         self.last_error: str | None = None
@@ -153,31 +159,106 @@ class OllamaSemanticMemoryRetriever:
                 ))
 
             scored.sort(key=lambda row: (row[0], row[1]), reverse=True)
-            self.last_candidates = [
-                {
-                    "topic_key": belief.get("topic_key"),
+
+            selected: list[dict] = []
+            decisions_by_topic: dict[str, dict] = {}
+
+            # Very strong embedding matches can be accepted directly. Mid-range
+            # candidates need a second-stage relevance judgment. Low scores are
+            # discarded before any extra model call.
+            for score, _updated, belief in scored:
+                if len(selected) >= limit:
+                    break
+                if score < self.threshold:
+                    continue
+                detail = {
+                    "belief": belief,
+                    "method": "semantic",
                     "score": round(score, 4),
-                    "selected": score >= self.threshold,
+                    "matched_tokens": [],
+                    "ignored_low_information_tokens": [],
                 }
-                for score, _updated, belief in scored[:3]
-            ]
-            ranked = [
-                (
-                    score,
-                    updated,
-                    {
+                selected.append(detail)
+                decisions_by_topic[str(belief.get("topic_key", ""))] = {
+                    "selected": True,
+                    "decision": "direct_accept",
+                    "reason": "embedding_score_above_direct_threshold",
+                }
+
+            remaining = max(0, limit - len(selected))
+            borderline: list[dict] = []
+            if remaining:
+                directly_selected_ids = {
+                    str(detail["belief"].get("belief_id", ""))
+                    for detail in selected
+                }
+                for score, _updated, belief in scored:
+                    if len(borderline) >= remaining:
+                        break
+                    if score < self.candidate_floor or score >= self.threshold:
+                        continue
+                    if str(belief.get("belief_id", "")) in directly_selected_ids:
+                        continue
+                    borderline.append({
                         "belief": belief,
-                        "method": "semantic",
+                        "method": "semantic_reranked",
                         "score": round(score, 4),
                         "matched_tokens": [],
                         "ignored_low_information_tokens": [],
-                    },
-                )
-                for score, updated, belief in scored
-                if score >= self.threshold
-            ]
+                    })
+
+            if borderline and self.relevance_gate is not None:
+                decisions = await self.relevance_gate.judge(user_text, borderline)
+                for candidate, decision in zip(borderline, decisions, strict=True):
+                    topic = str(candidate["belief"].get("topic_key", ""))
+                    decisions_by_topic[topic] = {
+                        "selected": bool(decision["relevant"]),
+                        "decision": (
+                            "reranker_accept"
+                            if decision["relevant"]
+                            else "reranker_reject"
+                        ),
+                        "reason": decision["reason"],
+                    }
+                    if decision["relevant"] and len(selected) < limit:
+                        selected.append({
+                            **candidate,
+                            "reranker_reason": decision["reason"],
+                        })
+            elif borderline:
+                for candidate in borderline:
+                    topic = str(candidate["belief"].get("topic_key", ""))
+                    decisions_by_topic[topic] = {
+                        "selected": False,
+                        "decision": "below_direct_threshold",
+                        "reason": "no_relevance_gate_configured",
+                    }
+
+            self.last_candidates = []
+            for score, _updated, belief in scored[:3]:
+                topic = str(belief.get("topic_key", ""))
+                decision = decisions_by_topic.get(topic)
+                if decision is None:
+                    if score < self.candidate_floor:
+                        decision = {
+                            "selected": False,
+                            "decision": "below_candidate_floor",
+                            "reason": "embedding_score_below_candidate_floor",
+                        }
+                    else:
+                        decision = {
+                            "selected": False,
+                            "decision": "not_evaluated",
+                            "reason": "semantic_limit_reached",
+                        }
+                self.last_candidates.append({
+                    "topic_key": belief.get("topic_key"),
+                    "score": round(score, 4),
+                    **decision,
+                })
+
             self.last_error = None
-            return [detail for _score, _updated, detail in ranked[:limit]]
+            return selected[:limit]
         except Exception as exc:  # noqa: BLE001 - semantic recall must fail open
             self.last_candidates = []
             self.last_error = f"{type(exc).__name__}: {exc}"
@@ -189,10 +270,16 @@ class OllamaSemanticMemoryRetriever:
             "enabled": self.disabled_reason is None,
             "model": self.model,
             "threshold": self.threshold,
+            "candidate_floor": self.candidate_floor,
             "limit": self.limit,
             "query_instruction": self.query_instruction,
             "cached_beliefs": len(self._belief_vectors),
             "last_error": self.last_error,
             "last_candidates": self.last_candidates,
+            "relevance_gate": (
+                self.relevance_gate.status()
+                if self.relevance_gate is not None
+                else {"enabled": False}
+            ),
             "disabled_reason": self.disabled_reason,
         }

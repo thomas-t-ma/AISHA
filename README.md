@@ -372,8 +372,26 @@ Recall diagnostics retain the retrieval method. A semantic match appears as
 `method: "semantic"` with its cosine score and no lexical match tokens. Studio
 also shows the configured embedding model and any semantic-retrieval error.
 For threshold tuning, the turn status records the top semantic candidates even
-when they fall below the selection threshold; below-threshold candidates are
-diagnostic only and are never injected into AISHA's prompt.
+when they are not selected.
+
+Semantic recall now uses two stages:
+
+- scores below `0.30` are discarded immediately and do not trigger another
+  model call;
+- scores at or above `0.72` are accepted directly;
+- scores from `0.30` through `0.72` are sent in one small batch to a strict
+  relevance gate using the already-loaded conversational Ollama model.
+
+The relevance gate judges only whether the candidate memory concerns the same
+underlying personal situation, decision, preference, goal, relationship,
+problem, or unresolved thread. It is explicitly told to reject merely topical
+or generic associations and does not re-judge memory truth/evidence. If the
+gate fails or returns malformed output, the candidate is rejected while chat
+continues normally.
+
+This keeps low-similarity controls such as unrelated food questions cheap while
+allowing indirect paraphrases to be recovered without globally lowering the
+final semantic safety threshold.
 
 Semantic retrieval fails open: if embedding generation is unavailable, normal
 chat and lexical recall continue. A missing embedding model disables semantic

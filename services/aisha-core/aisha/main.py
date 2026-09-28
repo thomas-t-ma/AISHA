@@ -13,6 +13,7 @@ from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.reflector import OllamaReflector
+from aisha.memory.relevance import OllamaMemoryRelevanceGate
 from aisha.memory.semantic import OllamaSemanticMemoryRetriever
 from aisha.providers.base import AISHAProviderError
 from aisha.providers.registry import build_llm_provider
@@ -54,6 +55,7 @@ async def lifespan(app: FastAPI):
     reflector = None
     evidence_verifier = None
     semantic_retriever = None
+    semantic_relevance_gate = None
     if settings.aisha_auto_memory and profile.llm.provider == "ollama" and profile.llm.base_url:
         reflector = OllamaReflector(
             model=profile.llm.model,
@@ -61,6 +63,16 @@ async def lifespan(app: FastAPI):
             keep_alive=profile.llm.keep_alive,
         )
         evidence_verifier = OllamaEvidenceVerifier(
+            model=profile.llm.model,
+            base_url=profile.llm.base_url,
+            keep_alive=profile.llm.keep_alive,
+        )
+    if (
+        profile.memory.semantic_relevance_gate
+        and profile.llm.provider == "ollama"
+        and profile.llm.base_url
+    ):
+        semantic_relevance_gate = OllamaMemoryRelevanceGate(
             model=profile.llm.model,
             base_url=profile.llm.base_url,
             keep_alive=profile.llm.keep_alive,
@@ -75,7 +87,9 @@ async def lifespan(app: FastAPI):
             base_url=profile.memory.embedding_base_url or profile.llm.base_url or "",
             keep_alive=profile.memory.embedding_keep_alive,
             threshold=profile.memory.semantic_threshold,
+            candidate_floor=profile.memory.semantic_candidate_floor,
             limit=profile.memory.semantic_limit,
+            relevance_gate=semantic_relevance_gate,
             query_instruction=profile.memory.semantic_query_instruction,
         )
     orchestrator = AISHAOrchestrator(
