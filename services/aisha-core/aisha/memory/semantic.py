@@ -20,12 +20,19 @@ class OllamaSemanticMemoryRetriever:
         threshold: float = 0.72,
         limit: int = 2,
         keep_alive: str | int | None = None,
+        query_instruction: str = (
+            "Given a user's current message, retrieve a previously stated personal "
+            "memory that is directly relevant and useful for responding. Prefer the "
+            "same situation or underlying concern even when phrased differently; "
+            "avoid merely topical or generic associations."
+        ),
     ) -> None:
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.threshold = threshold
         self.limit = max(1, limit)
         self.keep_alive = keep_alive
+        self.query_instruction = query_instruction.strip()
         self._belief_vectors: dict[str, list[float]] = {}
         self.last_error: str | None = None
         self.last_candidates: list[dict] = []
@@ -42,6 +49,11 @@ class OllamaSemanticMemoryRetriever:
                 str(belief.get("open_question") or ""),
             ]
         )
+
+    def _query_text(self, user_text: str) -> str:
+        # Qwen3-Embedding recommends an instruction on retrieval queries only;
+        # documents remain unprefixed.
+        return f"Instruct: {self.query_instruction}\nQuery: {user_text}"
 
     @staticmethod
     def _document_text(belief: dict) -> str:
@@ -122,7 +134,7 @@ class OllamaSemanticMemoryRetriever:
                 missing.append((key, belief, self._document_text(belief)))
 
         try:
-            inputs = [user_text]
+            inputs = [self._query_text(user_text)]
             inputs.extend(document for _key, _belief, document in missing)
             vectors = await self._embed(inputs)
             query_vector = vectors[0]
@@ -178,6 +190,7 @@ class OllamaSemanticMemoryRetriever:
             "model": self.model,
             "threshold": self.threshold,
             "limit": self.limit,
+            "query_instruction": self.query_instruction,
             "cached_beliefs": len(self._belief_vectors),
             "last_error": self.last_error,
             "last_candidates": self.last_candidates,

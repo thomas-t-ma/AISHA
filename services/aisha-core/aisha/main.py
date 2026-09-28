@@ -76,6 +76,7 @@ async def lifespan(app: FastAPI):
             keep_alive=profile.memory.embedding_keep_alive,
             threshold=profile.memory.semantic_threshold,
             limit=profile.memory.semantic_limit,
+            query_instruction=profile.memory.semantic_query_instruction,
         )
     orchestrator = AISHAOrchestrator(
         store, persona, provider, ledger=ledger, reflector=reflector,

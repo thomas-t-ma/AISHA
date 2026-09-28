@@ -88,6 +88,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         {"topic_key": "job_patient_interaction_level", "score": 0.92, "selected": True},
         {"topic_key": "country_residence_decision", "score": 0.10, "selected": False},
     ]
+    assert "previously stated personal memory" in retriever.status()["query_instruction"]
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -99,6 +100,11 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
     assert len(requests[1]["input"]) == 1
     assert requests[0]["model"] == "qwen3-embedding:0.6b"
     assert requests[0]["keep_alive"] == "30m"
+    assert requests[0]["input"][0].startswith(
+        "Instruct: Given a user's current message"
+    )
+    assert "\nQuery: I want work that feels more hands-on" in requests[0]["input"][0]
+    assert not requests[0]["input"][1].startswith("Instruct:")
 
 
 @pytest.mark.asyncio

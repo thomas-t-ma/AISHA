@@ -348,17 +348,25 @@ small local embedding model. Lexical retrieval always runs first. Semantic
 retrieval only fills unused recall slots, cannot duplicate an already-selected
 lexical belief, and still considers only `verified` learned beliefs.
 
-The default Mac embedding model is:
+The M2 Max profile now uses the stronger 4B Qwen3 embedder:
 
 ```bash
-ollama pull qwen3-embedding:0.6b
+ollama pull qwen3-embedding:4b
 ```
 
-Core calls Ollama's current `/api/embed` endpoint with batched inputs. Belief
-vectors are cached in-process by belief ID/revision/content; after the first
-comparison, subsequent turns normally embed only the new user message. The
-default semantic cosine-similarity threshold is `0.72`, with at most two
-semantic additions and at most four total learned memories per turn.
+Core calls Ollama's current `/api/embed` endpoint with batched inputs. Following
+Qwen3-Embedding's retrieval guidance, the **query** is prefixed with a
+task-specific instruction while learned-memory documents remain unprefixed.
+The instruction asks the model to retrieve a prior personal memory that is
+directly useful for the current message, including the same underlying
+situation phrased differently, while avoiding merely topical associations.
+
+Belief vectors are cached in-process by belief ID/revision/content; after the
+first comparison, subsequent turns normally embed only the new instructed
+query. The default semantic cosine-similarity threshold remains `0.72`, with
+at most two semantic additions and at most four total learned memories per
+turn. We intentionally improve the representation before relaxing the
+selection threshold.
 
 Recall diagnostics retain the retrieval method. A semantic match appears as
 `method: "semantic"` with its cosine score and no lexical match tokens. Studio

@@ -30,6 +30,12 @@ class MemoryProfile(BaseModel):
     embedding_keep_alive: str | int | None = None
     semantic_threshold: float = 0.72
     semantic_limit: int = 2
+    semantic_query_instruction: str = (
+        "Given a user's current message, retrieve a previously stated personal "
+        "memory that is directly relevant and useful for responding. Prefer the "
+        "same situation or underlying concern even when phrased differently; "
+        "avoid merely topical or generic associations."
+    )
 
 
 class RuntimeProfile(BaseModel):

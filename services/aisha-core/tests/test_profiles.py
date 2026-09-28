@@ -22,6 +22,6 @@ def test_m2max_profile_preloads_conversation_model():
     assert profile.llm.think is False
     assert profile.llm.keep_alive == "30m"
     assert profile.memory.semantic_recall is True
-    assert profile.memory.embedding_model == "qwen3-embedding:0.6b"
+    assert profile.memory.embedding_model == "qwen3-embedding:4b"
     assert profile.memory.semantic_threshold == 0.72
     assert profile.memory.semantic_limit == 2
