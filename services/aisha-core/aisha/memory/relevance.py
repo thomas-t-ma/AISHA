@@ -137,7 +137,7 @@ class OllamaMemoryRelevanceGate:
                 data = response.json()
             raw = data.get("message", {}).get("content")
             if not isinstance(raw, str):
-                raise ValueError("relevance_gate_missing_response")
+                raise TypeError("relevance_gate_missing_response")
             decisions = self._parse(raw, len(candidates))
             if decisions is None:
                 raise ValueError("relevance_gate_invalid_response")
