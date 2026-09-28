@@ -568,10 +568,10 @@ export default function App() {
                                 ? 'Off · ' + String(semanticStatus.disabled_reason)
                                 : 'Off'}</dd>
                           </div>
-                          {semanticStatus?.last_error && (
+                          {Boolean(semanticStatus?.last_error) && (
                             <div>
                               <dt>Semantic error</dt>
-                              <dd>{String(semanticStatus.last_error)}</dd>
+                              <dd>{String(semanticStatus?.last_error)}</dd>
                             </div>
                           )}
                           {recallDetails.map((detail, index) => (
