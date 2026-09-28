@@ -17,6 +17,26 @@ export async function createSession(): Promise<string> {
   return created.session_id;
 }
 
+export interface SessionSettings {
+  session_id: string;
+  memory_mode: 'normal' | 'test';
+}
+
+export function getSessionSettings(sessionId: string): Promise<SessionSettings> {
+  return json<SessionSettings>('/v1/sessions/' + encodeURIComponent(sessionId));
+}
+
+export function setSessionMemoryMode(
+  sessionId: string,
+  memoryMode: 'normal' | 'test',
+): Promise<SessionSettings> {
+  return json<SessionSettings>('/v1/sessions/' + encodeURIComponent(sessionId), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ memory_mode: memoryMode }),
+  });
+}
+
 export function getMessages(sessionId: string): Promise<StoredMessage[]> {
   return json<StoredMessage[]>('/v1/sessions/' + encodeURIComponent(sessionId) + '/messages');
 }

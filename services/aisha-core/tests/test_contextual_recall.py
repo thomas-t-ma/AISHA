@@ -246,3 +246,108 @@ async def test_unrelated_turn_receives_no_learned_memory_context(tmp_path):
     started = next(event for event in events if event.type == "aisha.turn.started")
     assert started.payload["memory_recall_count"] == 0
     assert started.payload["memory_recall_topics"] == []
+
+
+class ReflectionShouldNotRun:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def reflect(self, user_text: str, existing: list[dict]) -> list[dict]:
+        self.calls += 1
+        return [{
+            "action": "add",
+            "target_belief_id": None,
+            "topic_key": "synthetic_test_memory",
+            "text": "The user has a synthetic test preference.",
+            "epistemic_status": "stated",
+            "source_quote": user_text,
+            "open_question": None,
+        }]
+
+
+@pytest.mark.asyncio
+async def test_test_mode_allows_recall_but_suppresses_long_term_learning(tmp_path):
+    store = AISHAStore(tmp_path / "sandbox.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+
+    await add_belief(
+        ledger,
+        topic="job_patient_interaction_level",
+        text="The user's current job involves little patient interaction.",
+        quote="My current job doesn't have much patient interaction.",
+        verified=True,
+    )
+    initial_episode_count = len(await ledger.list_episodes(limit=100))
+
+    provider = PromptProbe()
+    reflector = ReflectionShouldNotRun()
+    orch = AISHAOrchestrator(
+        store,
+        load_persona(Settings(aisha_profile="mock").character_dir),
+        provider,
+        ledger=ledger,
+        reflector=reflector,
+    )
+    session = await store.create_session()
+    updated = await store.set_session_memory_mode(session, "test")
+    assert updated is not None and updated["memory_mode"] == "test"
+
+    events = [
+        event async for event in orch.stream_user_turn(
+            session, "I want more patient interaction in my work."
+        )
+    ]
+    await orch.wait_for_reflections()
+
+    prompt = provider.prompts[-1]
+    assert "current job involves little patient interaction" in prompt
+    started = next(event for event in events if event.type == "aisha.turn.started")
+    assert started.payload["memory_recall_count"] == 1
+    assert started.payload["memory_mode"] == "test"
+    assert started.payload["memory_learning_enabled"] is False
+
+    assert reflector.calls == 0
+    assert len(await ledger.list_episodes(limit=100)) == initial_episode_count
+    assert not any(
+        belief["topic_key"] == "synthetic_test_memory"
+        for belief in await ledger.list_beliefs(limit=100)
+    )
+
+    persisted = await store.session_events(session, limit=100)
+    skipped = [
+        event for event in persisted
+        if event["type"] == "aisha.memory.learning_skipped"
+    ]
+    assert len(skipped) == 1
+    assert skipped[0]["payload"] == {
+        "reason": "test_mode",
+        "memory_mode": "test",
+    }
+
+
+@pytest.mark.asyncio
+async def test_switching_test_session_back_to_normal_resumes_learning(tmp_path):
+    store = AISHAStore(tmp_path / "resume.sqlite3")
+    await store.initialize()
+    ledger = ExperienceLedger(store)
+    await ledger.initialize()
+    provider = PromptProbe()
+    reflector = ReflectionShouldNotRun()
+    orch = AISHAOrchestrator(
+        store,
+        load_persona(Settings(aisha_profile="mock").character_dir),
+        provider,
+        ledger=ledger,
+        reflector=reflector,
+    )
+    session = await store.create_session()
+    await store.set_session_memory_mode(session, "test")
+    _ = [event async for event in orch.stream_user_turn(session, "Synthetic test statement.")]
+    assert reflector.calls == 0
+
+    await store.set_session_memory_mode(session, "normal")
+    _ = [event async for event in orch.stream_user_turn(session, "Synthetic test statement.")]
+    await orch.wait_for_reflections()
+    assert reflector.calls == 1

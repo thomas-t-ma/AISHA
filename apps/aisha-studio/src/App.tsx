@@ -435,7 +435,11 @@ export default function App() {
               )}
             </div>
           </form>
-          <div className="composer-disclaimer">Development build · AISHA has no camera or microphone access yet.</div>
+          <div className={'composer-disclaimer ' + (memoryMode === 'test' ? 'test-active' : '')}>
+            {memoryMode === 'test'
+              ? 'TEST CONVERSATION · recall enabled · learned-memory writes disabled'
+              : 'Development build · AISHA has no camera or microphone access yet.'}
+          </div>
         </div>
       </main>
 

@@ -268,6 +268,11 @@ class AISHAOrchestrator:
 
     async def stream_user_turn(self, session_id: str, text: str) -> AsyncIterator[AISHAEvent]:
         await self.store.ensure_session(session_id)
+        session = await self.store.session_info(session_id)
+        memory_mode = (
+            session["memory_mode"] if session is not None else "normal"
+        )
+        memory_learning_enabled = memory_mode != "test"
         history = await self.store.recent_messages(session_id)
         approved_memories = await self.store.list_memories(limit=12)
         learned_beliefs = (
@@ -366,6 +371,8 @@ class AISHAOrchestrator:
                     }
                     for detail in recall_details
                 ],
+                "memory_mode": memory_mode,
+                "memory_learning_enabled": memory_learning_enabled,
             },
         )
         yield started_event
@@ -486,7 +493,7 @@ class AISHAOrchestrator:
                 "backend_metrics": backend_metrics,
             },
         )
-        if self.ledger is not None:
+        if self.ledger is not None and memory_learning_enabled:
             try:
                 episode = await self.ledger.record_episode(
                     session_id=session_id,
@@ -502,4 +509,11 @@ class AISHAOrchestrator:
                     task.add_done_callback(self._reflections.discard)
             except Exception:
                 logger.exception("Could not persist completed memory episode")
+        elif self.ledger is not None and not memory_learning_enabled:
+            await self._persisted_event(
+                session_id=session_id,
+                turn_id=context.turn_id,
+                type_="aisha.memory.learning_skipped",
+                payload={"reason": "test_mode", "memory_mode": memory_mode},
+            )
         yield finished_event
