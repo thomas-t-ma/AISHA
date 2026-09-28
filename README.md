@@ -246,3 +246,30 @@ Studio retains the original rejection alongside a separate recovery outcome
 saved, while the original rejected proposal remains counted as rejected.
 This does not backfill previously failed reflections or guarantee that the
 local model will always find a useful independent memory.
+
+
+## Contextual recall v1 (experimental)
+
+AISHA no longer injects every recent learned belief into every turn. Before a
+reply, Core now considers up to 50 learned beliefs, excludes every
+`legacy_unchecked` entry, and selects at most four **verified** beliefs whose
+topic/text/open question shares substantive terms with the current user
+message. The selected topics are recorded on the `aisha.turn.started` event as
+`memory_recall_topics` for debugging.
+
+This first retrieval pass intentionally favors precision over recall: it is a
+small local lexical ranker, not embeddings or another pre-response LLM call.
+That keeps first-token latency unchanged and prevents unrelated memories from
+being sprayed into the prompt. It can miss semantic relationships expressed
+with completely different vocabulary; semantic/vector retrieval is a future
+upgrade.
+
+When recalled, verified beliefs are presented as fallible continuity context.
+The chat model is told to let genuinely relevant history influence the response
+naturally, not to announce memory access, recite stored facts, or force
+follow-up questions. Unresolved questions may be revisited only when the
+current message already engages that topic.
+
+Manual user-authored memories retain their existing behavior. Legacy learned
+beliefs remain visible in Studio and their revision history is unchanged, but
+they are no longer active conversational knowledge until separately reconciled.
