@@ -112,6 +112,8 @@ async def main() -> None:
                 f"{' '.join(score_parts)} "
                 f"{candidate.get('decision')}"
             )
+            if candidate.get("reason"):
+                print(f"    reason: {candidate.get('reason')}")
 
     summary = summarize_results(results)
     print("\nSUMMARY")

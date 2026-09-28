@@ -441,6 +441,9 @@ async def test_ollama_relevance_gate_parses_strict_batch_json(monkeypatch):
     assert requests[0]["think"] is False
     assert requests[0]["options"]["temperature"] == 0
     assert requests[0]["keep_alive"] == "30m"
+    system_prompt = requests[0]["messages"][0]["content"]
+    assert "DEFINING PROPOSITION" in system_prompt
+    assert "Do not turn one personal thread into a second adjacent thread" in system_prompt
 
 
 @pytest.mark.asyncio

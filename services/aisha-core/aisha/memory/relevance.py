@@ -18,22 +18,31 @@ unresolved thread. Different wording is fine. A current message may contradict,
 update, question, or indirectly describe that same personal thread.
 
 Be strict about PERSONAL CONTINUITY:
+- First identify the candidate memory's DEFINING PROPOSITION: the specific
+  relation it claims about the user, not merely its broad topic.
+- Approve only when the CURRENT message states, updates, contradicts, questions,
+  or strongly paraphrases that defining proposition. If a required relation
+  would have to be invented, inferred from a broad motive, or imported from the
+  memory itself, reject it.
+- Do not turn one personal thread into a second adjacent thread. Wanting more
+  direct human contact does not by itself imply a volunteering constraint;
+  wanting a quieter keyboard does not by itself invoke a general computer-part
+  quality preference.
 - A general informational question is not personal continuity merely because it
   shares words with a memory. Example: asking how medical-school accreditation
   works does NOT make a personal medical-school application goal relevant.
-- A broader category is not enough. A keyboard question does NOT automatically
-  make a general preference about computer-component quality relevant.
-- A healthcare or AI question does NOT automatically make every healthcare,
-  school, or research memory relevant.
-- For multi-topic messages, approve each memory only if that specific personal
-  thread is independently present in the current message.
+- A broader category is not enough. A healthcare or AI question does NOT
+  automatically make every healthcare, school, or research memory relevant.
+- For multi-topic messages, approve each memory only if that specific defining
+  proposition is independently present in the current message.
 
-Reject merely topical, generic, adjacent, or associative similarity. Shared
-ideas such as work, people, food, computers, healthcare, school, projects,
-feelings, time, or wanting something are not enough by themselves. Do not force
-a callback merely because a memory could be mentioned. Ask: would omitting this
-specific memory lose useful continuity about what the user is personally
-talking about right now? If not, reject it.
+Reject merely topical, generic, adjacent, motivational, or associative
+similarity. Shared ideas such as work, helping people, food, computers,
+healthcare, school, projects, feelings, time, or wanting something are not
+enough by themselves. Do not force a callback merely because a memory could be
+mentioned. Ask two questions: (1) what exact personal proposition does this
+memory add, and (2) is that proposition actually active in the CURRENT message?
+If the answer to (2) is not clearly yes, reject it.
 
 Judge RELEVANCE only. Do not decide whether the memory is true, current, or
 factually verified; another subsystem handles evidence integrity. If uncertain,
