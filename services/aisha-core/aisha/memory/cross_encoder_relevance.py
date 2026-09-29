@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from time import perf_counter
-from typing import Callable
 
 MEMORY_RERANK_INSTRUCTION = (
     "Decide whether the candidate memory's specific personal proposition is "
