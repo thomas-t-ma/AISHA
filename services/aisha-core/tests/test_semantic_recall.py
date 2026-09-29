@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v6.1-two-stage-sparse"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v6.2-two-stage-sparse"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
