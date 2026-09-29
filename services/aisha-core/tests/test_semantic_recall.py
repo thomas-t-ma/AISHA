@@ -455,7 +455,7 @@ async def test_ollama_relevance_gate_parses_v5_scope_and_batch_json(monkeypatch)
     assert "personal_anchored" in system_prompt
     assert "MINIMAL, MAXIMALLY FAITHFUL SET" in system_prompt
     assert "QUALIFIER FIDELITY" in system_prompt
-    assert "MEMORY-BLIND TEST" in system_prompt
+    assert "MEMORY-BLIND SAFETY TEST" in system_prompt
     assert gate.status()["message_scope"] == "personal_anchored"
     assert gate.status()["last_metrics"]["total_ms"] == 0.0
 
