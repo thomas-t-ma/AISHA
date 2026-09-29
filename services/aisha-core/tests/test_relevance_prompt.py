@@ -12,7 +12,7 @@ def test_v6_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v6.1-two-stage-sparse"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v6.2-two-stage-sparse"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
@@ -24,6 +24,8 @@ def test_v6_physically_separates_message_analysis_from_candidate_selection():
     assert "ZERO or ONE match per proposition" in selection_prompt
     assert "QUALIFIER FIDELITY" in selection_prompt
     assert "Candidate retrieval order and score are not evidence" in selection_prompt
+    assert "MEMORY-ADDRESSABLE" in analysis_prompt
+    assert "SAME candidate MAY appear for multiple propositions" in selection_prompt
 
 
 def test_analysis_parser_requires_no_propositions_for_nonpersonal_scope():
@@ -125,6 +127,40 @@ def test_selection_parser_expands_sparse_matches_and_verifies_topic_index():
     )
 
 
+
+def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
+    raw = json.dumps(
+        {
+            "matches": [
+                {
+                    "proposition_index": 0,
+                    "candidate_index": 1,
+                    "candidate_topic_key": "keyboard_preference",
+                    "reason": "matches smooth linear switches",
+                },
+                {
+                    "proposition_index": 1,
+                    "candidate_index": 1,
+                    "candidate_topic_key": "keyboard_preference",
+                    "reason": "matches quiet keyboard preference",
+                },
+            ]
+        }
+    )
+
+    parsed = OllamaMemoryRelevanceGate._parse_selection(
+        raw,
+        expected=2,
+        proposition_count=2,
+        candidate_topics=["computer_build_priority", "keyboard_preference"],
+    )
+
+    assert parsed is not None
+    assert parsed[1]["relevant"] is True
+    assert parsed[1]["proposition_index"] == 0
+    assert parsed[1]["proposition_indices"] == [0, 1]
+
+
 def test_relevance_status_reports_v6_fields():
     gate = OllamaMemoryRelevanceGate(
         model="test-model",
@@ -134,7 +170,7 @@ def test_relevance_status_reports_v6_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v6.1-two-stage-sparse"
+    assert status["prompt_version"] == "personal-continuity-v6.2-two-stage-sparse"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []
