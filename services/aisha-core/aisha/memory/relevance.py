@@ -5,122 +5,120 @@ import json
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v4"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v5"
 
-RELEVANCE_SYSTEM = """You are a conservative relevance judge for conversational memory.
-Your job is to select the MINIMAL SUFFICIENT SET of personal memories needed
-to respond naturally and accurately to the user's CURRENT message.
+RELEVANCE_SYSTEM = """You are a conservative semantic judge for conversational memory.
+Your job is to select the MINIMAL, MAXIMALLY FAITHFUL SET of personal memories
+that directly matches the user's CURRENT message.
 
-Judge the candidate memories JOINTLY, not as independent yes/no matches.
-
-FIRST classify the CURRENT message itself, without using candidate memories to
-fill in missing context. Only then select the smallest useful subset.
+Judge candidates JOINTLY. Candidate retrieval rank or score is not evidence of
+relevance; judge only the meaning of the current message and memory proposition.
 
 Return ONLY JSON:
 {"message_scope":"personal_anchored|general_informational|ambiguous_unanchored",
  "scope_reason":"<=12 words",
  "decisions":[{"index":0,"relevant":true|false,"reason":"<=12 words"}]}
 
-GLOBAL SCOPE CLASSIFICATION
+STEP 1 — CLASSIFY THE CURRENT MESSAGE WITHOUT MEMORY
 
 personal_anchored:
-- The CURRENT message itself identifies a specific personal situation,
-  preference, interest, value, decision, goal, relationship, problem, or
-  ongoing thread.
-- It can name that thread directly or strongly paraphrase it.
-- A specific first-person preference or interest statement is personal_anchored
-  even when it is declarative rather than a request for help.
-- Examples: "I want more patient interaction in my current job"; "My weekday
-  schedule leaves no room for volunteering"; "I still plan to apply to medical
-  school"; "For my PC I don't want mystery components."
+- The message itself expresses a specific personal situation, preference,
+  interest, value, decision, goal, relationship, problem, update, or ongoing
+  thread.
+- Specific first-person declarative preferences and interests count as personal
+  anchors even when the user is not asking for advice.
 
 general_informational:
-- The message asks for general facts, explanation, advice, definitions,
+- The message asks for general facts, explanations, definitions,
   recommendations, statistics, or category-level information without grounding
-  the question in the user's own specific situation.
-- Topic overlap with a candidate memory NEVER makes a general question personal.
-- Examples: "Why do some healthcare jobs have little patient contact?"; "What
-  clay is easiest for beginners?"; "What switch types are best for an office
-  keyboard?"; "How is AI used in clinical research?"
-- A general question remains general even when the user happens to have a
-  personal memory about exactly that topic.
+  the request in the user's own specific situation.
+- Topic overlap with personal memory never turns a general question personal.
 
 ambiguous_unanchored:
-- The message is first-person or continuity-sounding but does not independently
-  identify which personal thread it refers to.
-- Vague phrases such as "that project", "something quieter", "cheap out again",
-  "more meaningful", "help people", or "not enough time after work" are not
-  enough by themselves.
-- Words such as "again", "still", "this time", "that", or "the usual" do NOT
-  permit you to use candidate memory as the missing referent.
+- The message sounds personal or continuous but does not independently identify
+  which personal thread it refers to.
+- Vague references such as "that", "it", "something", "more time", "a change",
+  "again", or "this time" cannot be resolved from candidate memory.
 
-HARD GLOBAL RULE:
-- If message_scope is general_informational, EVERY decision MUST be false.
-- If message_scope is ambiguous_unanchored, EVERY decision MUST be false.
-- Only personal_anchored messages may have any true decisions.
-- Determine message_scope from the CURRENT message BEFORE considering which
-  memories happen to be available.
+HARD SCOPE RULE:
+- general_informational => every decision false.
+- ambiguous_unanchored => every decision false.
+- Only personal_anchored may select memories.
 
-MINIMAL SUFFICIENT SET RULE
+STEP 2 — ATOMIZE THE PERSONAL MESSAGE
 
-For a personal_anchored message, select only the smallest set of memories that
-adds distinct, response-useful personal context.
+Before looking at candidates, split the CURRENT message into the smallest
+independent personal propositions actually expressed. Treat coordinated clauses
+as separate propositions when they express distinct goals or preferences.
 
-A candidate is relevant=true only if BOTH are true:
-1. THREAD MATCH: its defining personal proposition is independently active in
-   the CURRENT message.
-2. UNIQUE VALUE: it contributes useful information not already supplied by a
-   better-matching selected memory.
+Examples of proposition structure:
+- object + relation: "apply to medical school"
+- preference + qualifier: "likes spicy Thai food"
+- situation + qualifier: "little direct patient interaction at work"
+- preference + object: "quiet linear keyboard"
+- decision/update + object: "reconsidering moving to a country"
 
-Reject a candidate when it is merely:
-- compatible with the message;
-- a plausible explanation or consequence of the message;
-- a broader background fact about the same domain;
-- a narrower detail that is already covered by a more complete matching memory;
-- a duplicate, subset, restatement, or redundant companion to another memory;
-- an adjacent goal, preference, interest, constraint, or biography item.
+Do not invent a proposition that is merely implied, plausible, causal, or
+helpful background.
 
-Prefer the candidate whose DEFINING PROPOSITION most directly and specifically
-matches what the user actually expressed. Do not collect every true fact from
-the same semantic neighborhood.
+STEP 3 — ALIGN CANDIDATES TO PROPOSITIONS
 
-If one candidate fully captures a thread and another only reinforces, explains,
-specializes, generalizes, or repeats it, select the best-matching one and reject
-the redundant one.
+A candidate may be relevant=true only when its DEFINING PROPOSITION maps
+directly to one of the explicit personal propositions from Step 2.
 
-Do NOT infer extra personal propositions merely because they would make sense.
-For example, a stated schedule constraint does not automatically activate every
-service goal; a stated project does not automatically activate a desire to
-finish or release it; a stated career plan does not automatically activate every
-school-selection preference.
+Require QUALIFIER FIDELITY:
+- Preserve the user's distinguishing qualifiers whenever a candidate exists that
+  does so.
+- Qualifiers include the object, subtype, target, domain, time/status, modality,
+  and relation expressed by the user.
+- A broader memory that drops a meaningful qualifier is weaker than a memory
+  that preserves it.
+- A narrower memory that adds an unexpressed qualifier is also weaker.
+- Do not substitute a nearby goal, value, consequence, explanation, or context
+  for the proposition actually expressed.
 
-For multi-topic messages, preserve genuinely independent threads. If the CURRENT
-message explicitly contains two distinct personal propositions and separate
-memories directly match each one, both may be selected. Minimal does NOT mean
-"one memory only"; it means no redundant or inferred memories.
+Prefer semantic equivalence or the closest faithful paraphrase, not the memory
+with the most overlapping words.
 
-MEMORY-BLIND TEST
+STEP 4 — SELECT THE MINIMAL MAXIMALLY FAITHFUL SET
 
-For each candidate:
+For each explicit personal proposition, select at most the best candidate unless
+multiple memories contribute genuinely non-overlapping information required by
+that same proposition.
+
+Reject candidates that are:
+- merely compatible with the message;
+- broader background facts about the same domain;
+- narrower details not stated by the user;
+- causes, consequences, motivations, or likely context;
+- duplicates, subsets, supersets, restatements, or redundant companions;
+- adjacent goals, interests, preferences, constraints, or biography.
+
+A selected memory should survive this counterfactual:
+"If this candidate were removed while the better-aligned candidate remained,
+would any explicit proposition in the CURRENT message lose its best personal
+continuity match?" If no, reject it as redundant.
+
+For multi-topic messages, preserve each genuinely independent proposition.
+Minimal does not mean one memory; it means one best match per expressed thread,
+with no inferred or redundant extras.
+
+MEMORY-BLIND SAFETY TEST
+
 1. Hide all candidate memories.
-2. Read only the CURRENT message.
-3. Identify the specific personal propositions actually expressed.
-4. Reveal the candidates.
-5. Select the smallest subset whose defining propositions map directly onto
-   those expressed propositions and materially improve the response.
+2. Identify the personal propositions solely from the CURRENT message.
+3. Reveal candidates.
+4. Match candidates to those pre-existing propositions.
+5. Reject any candidate that creates a new proposition rather than matching one.
 
-The candidate memories may confirm known context, but they may NOT supply a
-missing topic, referent, motive, domain, preference, goal, or situation that
-makes themselves seem relevant.
+Keep each reason extremely short (12 words maximum). Useful rejection reasons:
+"general question, not personal continuity", "ambiguous without message anchor",
+"broader than expressed proposition", "adds unexpressed qualifier",
+"adjacent personal thread", "redundant with closer match",
+"proposition not expressed".
 
-Keep each reason extremely short (12 words maximum). Good rejection reasons:
-"general question, not personal continuity", "candidate supplies missing
-referent", "adjacent personal thread", "redundant with stronger match",
-"background fact only", "proposition not expressed".
-
-Judge RELEVANCE only. Do not decide whether the memory is true, current, or
-factually verified; another subsystem handles evidence integrity. If uncertain,
-prefer false.
+Judge relevance only. Do not decide whether a memory is true or current; another
+subsystem handles evidence integrity. If uncertain, prefer false.
 """
 
 class OllamaMemoryRelevanceGate:
@@ -240,9 +238,6 @@ class OllamaMemoryRelevanceGate:
                 "topic_key": candidate["belief"].get("topic_key"),
                 "memory": candidate["belief"].get("text"),
                 "open_question": candidate["belief"].get("open_question"),
-                "embedding_score": candidate.get("semantic_score", candidate.get("score")),
-                "lexical_score": candidate.get("lexical_score"),
-                "candidate_sources": candidate.get("candidate_sources"),
             }
             for index, candidate in enumerate(candidates)
         ]
@@ -275,48 +270,67 @@ class OllamaMemoryRelevanceGate:
         if self.keep_alive is not None:
             payload["keep_alive"] = self.keep_alive
 
-        try:
-            timeout = httpx.Timeout(connect=5.0, read=30.0, write=15.0, pool=15.0)
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(f"{self.base_url}/api/chat", json=payload)
-                response.raise_for_status()
-                data = response.json()
-            self.last_metrics = {
-                "total_ms": round(float(data.get("total_duration", 0)) / 1_000_000, 3),
-                "load_ms": round(float(data.get("load_duration", 0)) / 1_000_000, 3),
-                "prompt_eval_ms": round(
-                    float(data.get("prompt_eval_duration", 0)) / 1_000_000, 3
-                ),
-                "eval_ms": round(float(data.get("eval_duration", 0)) / 1_000_000, 3),
-                "prompt_tokens": int(data.get("prompt_eval_count", 0) or 0),
-                "output_tokens": int(data.get("eval_count", 0) or 0),
-            }
-            raw = data.get("message", {}).get("content")
-            if not isinstance(raw, str):
-                raise TypeError("relevance_gate_missing_response")
-            parsed = self._parse(raw, len(candidates))
-            if parsed is None:
-                raise ValueError("relevance_gate_invalid_response")
-            decisions = parsed["decisions"]
-            self.last_message_scope = str(parsed["message_scope"])
-            self.last_scope_reason = str(parsed["scope_reason"])
-            self.last_decisions = decisions
-            self.last_error = None
-            return decisions
-        except Exception as exc:  # noqa: BLE001 - recall must never break chat
-            self.last_decisions = [
-                {
-                    "index": index,
-                    "relevant": False,
-                    "reason": "relevance_gate_unavailable",
+        timeout = httpx.Timeout(connect=5.0, read=30.0, write=15.0, pool=15.0)
+        final_error: Exception | None = None
+
+        for attempt in range(2):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.post(f"{self.base_url}/api/chat", json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+
+                metrics = {
+                    "total_ms": round(float(data.get("total_duration", 0)) / 1_000_000, 3),
+                    "load_ms": round(float(data.get("load_duration", 0)) / 1_000_000, 3),
+                    "prompt_eval_ms": round(
+                        float(data.get("prompt_eval_duration", 0)) / 1_000_000, 3
+                    ),
+                    "eval_ms": round(float(data.get("eval_duration", 0)) / 1_000_000, 3),
+                    "prompt_tokens": int(data.get("prompt_eval_count", 0) or 0),
+                    "output_tokens": int(data.get("eval_count", 0) or 0),
+                    "attempts": attempt + 1,
                 }
-                for index in range(len(candidates))
-            ]
-            self.last_message_scope = None
-            self.last_scope_reason = None
-            self.last_metrics = {}
-            self.last_error = f"{type(exc).__name__}: {exc}"
-            return self.last_decisions
+
+                raw = data.get("message", {}).get("content")
+                if not isinstance(raw, str):
+                    final_error = TypeError("relevance_gate_missing_response")
+                    if attempt == 0:
+                        continue
+                    break
+
+                parsed = self._parse(raw, len(candidates))
+                if parsed is None:
+                    final_error = ValueError("relevance_gate_invalid_response")
+                    if attempt == 0:
+                        continue
+                    break
+
+                decisions = parsed["decisions"]
+                self.last_message_scope = str(parsed["message_scope"])
+                self.last_scope_reason = str(parsed["scope_reason"])
+                self.last_decisions = decisions
+                self.last_metrics = metrics
+                self.last_error = None
+                return decisions
+            except Exception as exc:  # noqa: BLE001 - recall must never break chat
+                final_error = exc
+                break
+
+        self.last_decisions = [
+            {
+                "index": index,
+                "relevant": False,
+                "reason": "relevance_gate_unavailable",
+            }
+            for index in range(len(candidates))
+        ]
+        self.last_message_scope = None
+        self.last_scope_reason = None
+        self.last_metrics = {}
+        error = final_error or RuntimeError("relevance_gate_unknown_failure")
+        self.last_error = f"{type(error).__name__}: {error}"
+        return self.last_decisions
 
     def status(self) -> dict:
         return {
