@@ -198,6 +198,13 @@ def print_result(result: dict) -> None:
             )
         if row.get("gate_error"):
             print(f"      GATE ERROR: {row['gate_error']}")
+            if gate_status.get("protocol_phase"):
+                print(f"      protocol phase: {gate_status['protocol_phase']}")
+            if gate_status.get("protocol_response_preview"):
+                print(
+                    "      raw preview: "
+                    f"{gate_status['protocol_response_preview']}"
+                )
 
         expected_set = set(row["expected_topics"])
         for candidate in row["candidate_diagnostics"]:
