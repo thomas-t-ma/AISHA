@@ -15,11 +15,10 @@ def test_relevance_prompt_requires_global_scope_before_candidate_judgment():
     assert "personal_anchored" in normalized_prompt
     assert "general_informational" in normalized_prompt
     assert "ambiguous_unanchored" in normalized_prompt
-    assert "EVERY decision MUST be false" in normalized_prompt
-    assert "candidate supplies missing referent" in normalized_prompt
+    assert "general_informational => every decision false" in normalized_prompt
+    assert "ambiguous_unanchored => every decision false" in normalized_prompt
     assert "MINIMAL, MAXIMALLY FAITHFUL SET" in normalized_prompt
     assert "QUALIFIER FIDELITY" in normalized_prompt
-    assert "ATOMIC" not in normalized_prompt
     assert "ATOMIZE THE PERSONAL MESSAGE" in normalized_prompt
     assert "retrieval rank or score is not evidence" in normalized_prompt
     assert "redundant with closer match" in normalized_prompt
