@@ -7,11 +7,11 @@ from aisha.memory.relevance import (
 )
 
 
-def test_relevance_prompt_requires_global_scope_before_candidate_judgment():
+def test_relevance_prompt_requires_scope_classification_before_candidate_judgment():
     normalized_prompt = " ".join(RELEVANCE_SYSTEM.split())
 
     assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v5"
-    assert "GLOBAL SCOPE CLASSIFICATION" in normalized_prompt
+    assert "STEP 1 — CLASSIFY THE CURRENT MESSAGE WITHOUT MEMORY" in normalized_prompt
     assert "personal_anchored" in normalized_prompt
     assert "general_informational" in normalized_prompt
     assert "ambiguous_unanchored" in normalized_prompt
