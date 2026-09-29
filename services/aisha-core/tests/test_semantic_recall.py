@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v5"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v6-two-stage"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -390,27 +390,38 @@ async def test_below_candidate_floor_does_not_call_relevance_gate(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ollama_relevance_gate_parses_v5_scope_and_batch_json(monkeypatch):
+async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(monkeypatch):
     requests: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         requests.append(payload)
+        system_prompt = payload["messages"][0]["content"]
+        if "before any long-term memories are visible" in system_prompt:
+            response_payload = {
+                "message_scope": "personal_anchored",
+                "scope_reason": "specific patient-contact preference",
+                "propositions": [
+                    {
+                        "index": 0,
+                        "text": "wants more direct interaction with patients at work",
+                    }
+                ],
+            }
+        else:
+            response_payload = {
+                "decisions": [
+                    {
+                        "index": 0,
+                        "relevant": True,
+                        "proposition_index": 0,
+                        "reason": "closest patient-contact match",
+                    }
+                ]
+            }
         return httpx.Response(
             200,
-            json={
-                "message": {
-                    "content": json.dumps({
-                        "message_scope": "personal_anchored",
-                        "scope_reason": "explicit personal patient-contact concern",
-                        "decisions": [{
-                            "index": 0,
-                            "relevant": True,
-                            "reason": "same underlying patient-contact concern",
-                        }],
-                    })
-                }
-            },
+            json={"message": {"content": json.dumps(response_payload)}},
         )
 
     transport = httpx.MockTransport(handler)
@@ -432,63 +443,124 @@ async def test_ollama_relevance_gate_parses_v5_scope_and_batch_json(monkeypatch)
             "job_patient_interaction_level",
             "The user's current job involves little patient interaction.",
         ),
-        "score": 0.4344,
+        "semantic_score": 0.9,
+        "lexical_score": 20.0,
+        "candidate_sources": ["semantic", "lexical"],
     }
+
     decisions = await gate.judge(
         "I want work that feels more hands-on with the people I'm helping.",
         [candidate],
     )
 
+    assert len(requests) == 2
     assert decisions[0]["relevant"] is True
+    assert decisions[0]["proposition_index"] == 0
+
+    analysis_payload = json.loads(requests[0]["messages"][1]["content"])
+    assert set(analysis_payload) == {"current_user_message"}
+    assert "candidates" not in analysis_payload
+    assert requests[0]["options"]["num_predict"] == 180
     assert requests[0]["think"] is False
-    assert requests[0]["options"]["temperature"] == 0
-    assert requests[0]["options"]["num_predict"] == 320
-    assert "format" not in requests[0]
     assert requests[0]["keep_alive"] == "30m"
-    candidate_payload = requests[0]["messages"][1]["content"]
-    candidate_payload = json.loads(candidate_payload)["candidates"][0]
+
+    selection_payload = json.loads(requests[1]["messages"][1]["content"])
+    assert "current_user_message" not in selection_payload
+    assert selection_payload["propositions"][0]["index"] == 0
+    assert len(selection_payload["candidates"]) == 1
+    candidate_payload = selection_payload["candidates"][0]
     assert "embedding_score" not in candidate_payload
     assert "lexical_score" not in candidate_payload
     assert "candidate_sources" not in candidate_payload
-    system_prompt = requests[0]["messages"][0]["content"]
-    assert "STEP 1 — CLASSIFY THE CURRENT MESSAGE WITHOUT MEMORY" in system_prompt
-    assert "personal_anchored" in system_prompt
-    assert "MINIMAL, MAXIMALLY FAITHFUL SET" in system_prompt
-    assert "QUALIFIER FIDELITY" in system_prompt
-    assert "MEMORY-BLIND SAFETY TEST" in system_prompt
-    assert gate.status()["message_scope"] == "personal_anchored"
-    assert gate.status()["last_metrics"]["total_ms"] == 0.0
+    assert requests[1]["options"]["num_predict"] == 320
 
+    status = gate.status()
+    assert status["message_scope"] == "personal_anchored"
+    assert len(status["propositions"]) == 1
+    assert status["last_metrics"]["analysis_attempts"] == 1
+    assert status["last_metrics"]["selection_attempts"] == 1
+    assert status["last_metrics"]["total_ms"] == 0.0
 
 
 @pytest.mark.asyncio
-async def test_relevance_gate_retries_once_after_invalid_json(monkeypatch):
-    calls = 0
+async def test_relevance_gate_nonpersonal_scope_skips_candidate_selection(monkeypatch):
+    requests: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal calls
-        calls += 1
-        if calls == 1:
-            return httpx.Response(200, json={"message": {"content": "not json"}})
+        payload = json.loads(request.content)
+        requests.append(payload)
         return httpx.Response(
             200,
             json={
                 "message": {
                     "content": json.dumps(
                         {
-                            "message_scope": "personal_anchored",
-                            "scope_reason": "specific personal work preference",
-                            "decisions": [
-                                {
-                                    "index": 0,
-                                    "relevant": True,
-                                    "reason": "direct proposition match",
-                                }
-                            ],
+                            "message_scope": "ambiguous_unanchored",
+                            "scope_reason": "missing object of more time",
+                            "propositions": [],
                         }
                     )
                 }
             },
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = OllamaMemoryRelevanceGate(
+        model="qwen3.5:35b-mlx",
+        base_url="http://127.0.0.1:11434",
+    )
+    decisions = await gate.judge(
+        "I wish I had more time for the things I care about.",
+        [{"belief": verified_belief("b1", "pottery_hobby", "The user enjoys pottery.")}],
+    )
+
+    assert len(requests) == 1
+    assert decisions[0]["relevant"] is False
+    assert decisions[0]["reason"] == "ambiguous without message anchor"
+    assert gate.status()["propositions"] == []
+    assert gate.status()["last_metrics"]["selection_attempts"] == 0
+
+
+@pytest.mark.asyncio
+async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypatch):
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        payload = json.loads(request.content)
+        system_prompt = payload["messages"][0]["content"]
+        if calls == 1:
+            return httpx.Response(200, json={"message": {"content": "not json"}})
+        if "before any long-term memories are visible" in system_prompt:
+            response_payload = {
+                "message_scope": "personal_anchored",
+                "scope_reason": "specific patient-contact preference",
+                "propositions": [
+                    {"index": 0, "text": "wants more patient interaction at work"}
+                ],
+            }
+        else:
+            response_payload = {
+                "decisions": [
+                    {
+                        "index": 0,
+                        "relevant": True,
+                        "proposition_index": 0,
+                        "reason": "direct proposition match",
+                    }
+                ]
+            }
+        return httpx.Response(
+            200,
+            json={"message": {"content": json.dumps(response_payload)}},
         )
 
     transport = httpx.MockTransport(handler)
@@ -511,23 +583,25 @@ async def test_relevance_gate_retries_once_after_invalid_json(monkeypatch):
                     "b1",
                     "job_patient_interaction_level",
                     "The user's current job involves little patient interaction.",
-                ),
-                "semantic_score": 0.9,
-                "lexical_score": 20.0,
-                "candidate_sources": ["semantic", "lexical"],
+                )
             }
         ],
     )
 
-    assert calls == 2
+    assert calls == 3
     assert decisions[0]["relevant"] is True
     assert gate.last_error is None
-    assert gate.status()["last_metrics"]["attempts"] == 2
+    assert gate.status()["last_metrics"]["analysis_attempts"] == 2
+    assert gate.status()["last_metrics"]["selection_attempts"] == 1
 
 
 @pytest.mark.asyncio
 async def test_relevance_gate_failure_rejects_candidate_without_breaking_chat(monkeypatch):
+    calls = 0
+
     def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
         return httpx.Response(200, json={"message": {"content": "not json"}})
 
     transport = httpx.MockTransport(handler)
@@ -544,13 +618,18 @@ async def test_relevance_gate_failure_rejects_candidate_without_breaking_chat(mo
     )
     decisions = await gate.judge(
         "current message",
-        [{"belief": verified_belief("b1", "topic", "memory"), "score": 0.4}],
+        [{"belief": verified_belief("b1", "topic", "memory")}],
     )
-    assert decisions == [{
-        "index": 0,
-        "relevant": False,
-        "reason": "relevance_gate_unavailable",
-    }]
+
+    assert calls == 2
+    assert decisions == [
+        {
+            "index": 0,
+            "relevant": False,
+            "proposition_index": None,
+            "reason": "relevance_gate_unavailable",
+        }
+    ]
     assert "relevance_gate_invalid_response" in (gate.last_error or "")
 
 
