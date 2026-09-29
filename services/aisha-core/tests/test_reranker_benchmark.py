@@ -124,4 +124,9 @@ def test_reranker_summary_reports_over_retrieval_and_clean_queries():
     assert summary["clean_queries"] == 2
     assert summary["clean_query_rate"] == pytest.approx(2 / 3, rel=1e-3)
     assert summary["false_positive_cases"] == 1
+    assert summary["protocol_failures"] == 0
+    assert summary["judged_cases"] == 3
+    assert summary["judged_exact_accuracy"] == pytest.approx(1 / 3, rel=1e-3)
+    assert summary["judged_precision"] == 0.5
+    assert summary["judged_recall"] == 0.5
     assert summary["latency_ms"]["median_gate"] == 18.0
