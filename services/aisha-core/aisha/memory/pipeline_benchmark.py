@@ -416,14 +416,23 @@ async def run_pipeline_case(
     expected = set(case.expected_topics)
     actual = {str(detail["belief"]["topic_key"]) for detail in details}
     pool_topics = {str(row.get("topic_key", "")) for row in evaluated}
+    gate_accepted_topics = {
+        str(row.get("topic_key", ""))
+        for row in evaluated
+        if bool(row.get("selected"))
+    }
 
     retrieval_misses = sorted(expected - pool_topics)
-    gate_false_negatives = sorted((expected & pool_topics) - actual)
-    gate_false_positives = sorted(actual - expected)
+    gate_false_negatives = sorted(
+        (expected & pool_topics) - gate_accepted_topics
+    )
+    final_limit_displacements = sorted(
+        (expected & gate_accepted_topics) - actual
+    )
+    gate_false_positives = sorted(gate_accepted_topics - expected)
+    final_false_positives = sorted(actual - expected)
     correct_rejections = sorted(
-        topic
-        for topic in pool_topics - expected
-        if topic not in actual
+        (pool_topics - expected) - gate_accepted_topics
     )
 
     expected_in_pool = len(expected & pool_topics)
@@ -436,6 +445,7 @@ async def run_pipeline_case(
         "memory_store_size": len(beliefs),
         "expected_topics": sorted(expected),
         "candidate_pool_topics": [str(row.get("topic_key", "")) for row in evaluated],
+        "gate_accepted_topics": sorted(gate_accepted_topics),
         "actual_topics": sorted(actual),
         "exact": actual == expected,
         "candidate_recall_numerator": expected_in_pool,
@@ -445,7 +455,9 @@ async def run_pipeline_case(
         "false_negative": len(expected - actual),
         "retrieval_misses": retrieval_misses,
         "gate_false_negatives": gate_false_negatives,
+        "final_limit_displacements": final_limit_displacements,
         "gate_false_positives": gate_false_positives,
+        "final_false_positives": final_false_positives,
         "correct_rejections": correct_rejections,
         "lexical_candidates": [
             {
@@ -484,7 +496,14 @@ def summarize_pipeline_results(results: list[dict]) -> dict:
     expected_in_pool = sum(int(row["candidate_recall_numerator"]) for row in results)
     retrieval_misses = sum(len(row["retrieval_misses"]) for row in results)
     gate_false_negatives = sum(len(row["gate_false_negatives"]) for row in results)
+    final_limit_displacements = sum(
+        len(row.get("final_limit_displacements", [])) for row in results
+    )
     gate_false_positives = sum(len(row["gate_false_positives"]) for row in results)
+    final_false_positives = sum(
+        len(row.get("final_false_positives", row["gate_false_positives"]))
+        for row in results
+    )
     correct_rejections = sum(len(row["correct_rejections"]) for row in results)
 
     protocol_failures = sum(1 for row in results if row.get("gate_error"))
@@ -509,6 +528,9 @@ def summarize_pipeline_results(results: list[dict]) -> dict:
             "gate_false_negatives": sum(
                 len(row["gate_false_negatives"]) for row in rows
             ),
+            "final_limit_displacements": sum(
+                len(row.get("final_limit_displacements", [])) for row in rows
+            ),
             "gate_false_positives": sum(
                 len(row["gate_false_positives"]) for row in rows
             ),
@@ -526,7 +548,9 @@ def summarize_pipeline_results(results: list[dict]) -> dict:
         "expected_memories_in_pool": expected_in_pool,
         "retrieval_misses": retrieval_misses,
         "gate_false_negatives": gate_false_negatives,
+        "final_limit_displacements": final_limit_displacements,
         "gate_false_positives": gate_false_positives,
+        "final_false_positives": final_false_positives,
         "correct_rejections": correct_rejections,
         "protocol_failures": protocol_failures,
         "median_candidate_pool_size": (
