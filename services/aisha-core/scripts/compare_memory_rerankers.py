@@ -188,12 +188,25 @@ def print_reranker_result(result: dict) -> None:
         expected = ", ".join(row["expected_topics"]) or "none"
         actual = ", ".join(row["actual_topics"]) or "none"
         print(f"    {row['case_id']}: expected [{expected}] actual [{actual}]")
+        gate_status = row.get("relevance_gate", {})
         if row.get("gate_error"):
             print(f"      GATE ERROR: {row['gate_error']}")
-        elif row.get("message_scope"):
+            if gate_status.get("protocol_phase"):
+                print(f"      protocol phase: {gate_status['protocol_phase']}")
+            if gate_status.get("protocol_response_preview"):
+                print(
+                    "      raw preview: "
+                    f"{gate_status['protocol_response_preview']}"
+                )
+        if row.get("message_scope"):
             print(
                 f"      scope: {row['message_scope']} · "
                 f"{row.get('scope_reason') or ''}"
+            )
+        for proposition in gate_status.get("propositions") or []:
+            print(
+                f"      proposition {proposition.get('index')}: "
+                f"{proposition.get('text')}"
             )
         for candidate in row["candidate_decisions"]:
             marker = "*" if candidate["selected"] else "-"
