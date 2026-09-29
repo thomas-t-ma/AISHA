@@ -381,16 +381,13 @@ class OllamaMemoryRelevanceGate:
             }
             for index in range(len(candidates))
         ]
-        self.last_message_scope = None
-        self.last_scope_reason = None
-        self.last_propositions = []
         self.last_metrics = {}
         self.last_error = f"{type(exc).__name__}: {exc}"
         return self.last_decisions
 
     async def judge(self, user_text: str, candidates: list[dict]) -> list[dict]:
+        self.reset()
         if not candidates:
-            self.reset()
             return []
 
         # Phase 1 is physically memory-blind: no candidate content is included.
