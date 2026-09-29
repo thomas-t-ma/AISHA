@@ -5,13 +5,16 @@ import json
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v3"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v4"
 
 RELEVANCE_SYSTEM = """You are a conservative relevance judge for conversational memory.
-Your job is to prevent irrelevant personal memories from leaking into a response.
+Your job is to select the MINIMAL SUFFICIENT SET of personal memories needed
+to respond naturally and accurately to the user's CURRENT message.
+
+Judge the candidate memories JOINTLY, not as independent yes/no matches.
 
 FIRST classify the CURRENT message itself, without using candidate memories to
-fill in missing context. Only after that may you judge individual candidates.
+fill in missing context. Only then select the smallest useful subset.
 
 Return ONLY JSON:
 {"message_scope":"personal_anchored|general_informational|ambiguous_unanchored",
@@ -22,8 +25,11 @@ GLOBAL SCOPE CLASSIFICATION
 
 personal_anchored:
 - The CURRENT message itself identifies a specific personal situation,
-  preference, decision, goal, relationship, problem, or ongoing thread.
-- It can name it directly or strongly paraphrase it.
+  preference, interest, value, decision, goal, relationship, problem, or
+  ongoing thread.
+- It can name that thread directly or strongly paraphrase it.
+- A specific first-person preference or interest statement is personal_anchored
+  even when it is declarative rather than a request for help.
 - Examples: "I want more patient interaction in my current job"; "My weekday
   schedule leaves no room for volunteering"; "I still plan to apply to medical
   school"; "For my PC I don't want mystery components."
@@ -55,38 +61,62 @@ HARD GLOBAL RULE:
 - Determine message_scope from the CURRENT message BEFORE considering which
   memories happen to be available.
 
-CANDIDATE RULES FOR personal_anchored MESSAGES
+MINIMAL SUFFICIENT SET RULE
 
-Use this MEMORY-BLIND TEST for each candidate:
-1. Hide the candidate memory.
+For a personal_anchored message, select only the smallest set of memories that
+adds distinct, response-useful personal context.
+
+A candidate is relevant=true only if BOTH are true:
+1. THREAD MATCH: its defining personal proposition is independently active in
+   the CURRENT message.
+2. UNIQUE VALUE: it contributes useful information not already supplied by a
+   better-matching selected memory.
+
+Reject a candidate when it is merely:
+- compatible with the message;
+- a plausible explanation or consequence of the message;
+- a broader background fact about the same domain;
+- a narrower detail that is already covered by a more complete matching memory;
+- a duplicate, subset, restatement, or redundant companion to another memory;
+- an adjacent goal, preference, interest, constraint, or biography item.
+
+Prefer the candidate whose DEFINING PROPOSITION most directly and specifically
+matches what the user actually expressed. Do not collect every true fact from
+the same semantic neighborhood.
+
+If one candidate fully captures a thread and another only reinforces, explains,
+specializes, generalizes, or repeats it, select the best-matching one and reject
+the redundant one.
+
+Do NOT infer extra personal propositions merely because they would make sense.
+For example, a stated schedule constraint does not automatically activate every
+service goal; a stated project does not automatically activate a desire to
+finish or release it; a stated career plan does not automatically activate every
+school-selection preference.
+
+For multi-topic messages, preserve genuinely independent threads. If the CURRENT
+message explicitly contains two distinct personal propositions and separate
+memories directly match each one, both may be selected. Minimal does NOT mean
+"one memory only"; it means no redundant or inferred memories.
+
+MEMORY-BLIND TEST
+
+For each candidate:
+1. Hide all candidate memories.
 2. Read only the CURRENT message.
-3. Identify the specific personal proposition or thread present in the message.
-4. Reveal the candidate.
-5. Accept only if the candidate's DEFINING PROPOSITION matches that independently
-   identified thread and materially improves the response.
+3. Identify the specific personal propositions actually expressed.
+4. Reveal the candidates.
+5. Select the smallest subset whose defining propositions map directly onto
+   those expressed propositions and materially improve the response.
 
-The candidate may confirm or add known detail, but it may NOT supply the missing
-topic, referent, motive, domain, or situation that makes itself seem relevant.
-
-Reject:
-- merely topical or lexical similarity;
-- adjacent personal threads;
-- broad motives used to infer narrower memories;
-- a memory that merely explains why the user might have asked;
-- optional callbacks that do not materially help answer the message.
-
-A broad motive does not activate a narrower memory. "I want meaningful work"
-does not by itself activate low patient interaction, medical school, research,
-volunteering, or remote-work memories.
-
-For multi-topic personal messages, accept each memory only when its own defining
-proposition is independently present. Do not collapse two explicit clauses into
-one: a message can legitimately activate multiple memories.
+The candidate memories may confirm known context, but they may NOT supply a
+missing topic, referent, motive, domain, preference, goal, or situation that
+makes themselves seem relevant.
 
 Keep each reason extremely short (12 words maximum). Good rejection reasons:
 "general question, not personal continuity", "candidate supplies missing
-referent", "broad motive only", "adjacent personal thread", "ambiguous without
-current-message anchor".
+referent", "adjacent personal thread", "redundant with stronger match",
+"background fact only", "proposition not expressed".
 
 Judge RELEVANCE only. Do not decide whether the memory is true, current, or
 factually verified; another subsystem handles evidence integrity. If uncertain,
