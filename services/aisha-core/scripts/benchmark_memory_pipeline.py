@@ -140,7 +140,9 @@ def print_result(result: dict) -> None:
     print(
         f"  retrieval misses: {summary['retrieval_misses']} · "
         f"gate false negatives: {summary['gate_false_negatives']} · "
+        f"final-limit displacements: {summary['final_limit_displacements']} · "
         f"gate false positives: {summary['gate_false_positives']} · "
+        f"final false positives: {summary['final_false_positives']} · "
         f"correct rejections: {summary['correct_rejections']}"
     )
     print(
@@ -157,6 +159,7 @@ def print_result(result: dict) -> None:
             f"    {category}: {row['exact_cases']}/{row['cases']} exact · "
             f"retrieval miss {row['retrieval_misses']} · "
             f"gate FN {row['gate_false_negatives']} · "
+            f"limit {row['final_limit_displacements']} · "
             f"gate FP {row['gate_false_positives']}"
         )
 
@@ -174,6 +177,11 @@ def print_result(result: dict) -> None:
             print(f"      RETRIEVAL MISS: {', '.join(row['retrieval_misses'])}")
         if row["gate_false_negatives"]:
             print(f"      GATE FALSE NEGATIVE: {', '.join(row['gate_false_negatives'])}")
+        if row.get("final_limit_displacements"):
+            print(
+                "      FINAL-LIMIT DISPLACEMENT: "
+                f"{', '.join(row['final_limit_displacements'])}"
+            )
         if row["gate_false_positives"]:
             print(f"      GATE FALSE POSITIVE: {', '.join(row['gate_false_positives'])}")
         if row.get("gate_error"):
