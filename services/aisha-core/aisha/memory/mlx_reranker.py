@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from time import perf_counter
-from typing import Any
-
 
 DEFAULT_MEMORY_RERANK_INSTRUCTION = (
     "Given a current user message, determine whether a candidate memory's "
@@ -28,9 +26,9 @@ class MLXQwen3MemoryReranker:
         self.model_name = model
         self.threshold = threshold
         self.instruction = instruction.strip()
-        self._model: Any | None = None
-        self._tokenizer: Any | None = None
-        self._mx: Any | None = None
+        self._model = None
+        self._tokenizer = None
+        self._mx = None
         self._prefix_tokens: list[int] | None = None
         self._suffix_tokens: list[int] | None = None
         self._true_id: int | None = None
