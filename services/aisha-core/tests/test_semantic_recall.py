@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v6-two-stage"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v6.1-two-stage-sparse"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -410,11 +410,11 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
             }
         else:
             response_payload = {
-                "decisions": [
+                "matches": [
                     {
-                        "index": 0,
-                        "relevant": True,
                         "proposition_index": 0,
+                        "candidate_index": 0,
+                        "candidate_topic_key": "job_patient_interaction_level",
                         "reason": "closest patient-contact match",
                     }
                 ]
@@ -549,11 +549,11 @@ async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypat
             }
         else:
             response_payload = {
-                "decisions": [
+                "matches": [
                     {
-                        "index": 0,
-                        "relevant": True,
                         "proposition_index": 0,
+                        "candidate_index": 0,
+                        "candidate_topic_key": "job_patient_interaction_level",
                         "reason": "direct proposition match",
                     }
                 ]
