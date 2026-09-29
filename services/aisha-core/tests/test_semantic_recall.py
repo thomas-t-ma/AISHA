@@ -396,8 +396,8 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         requests.append(payload)
-        system_prompt = payload["messages"][0]["content"]
-        if "before any long-term memories are visible" in system_prompt:
+        user_payload = json.loads(payload["messages"][1]["content"])
+        if "current_user_message" in user_payload:
             response_payload = {
                 "message_scope": "personal_anchored",
                 "scope_reason": "specific patient-contact preference",
@@ -536,10 +536,10 @@ async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypat
         nonlocal calls
         calls += 1
         payload = json.loads(request.content)
-        system_prompt = payload["messages"][0]["content"]
+        user_payload = json.loads(payload["messages"][1]["content"])
         if calls == 1:
             return httpx.Response(200, json={"message": {"content": "not json"}})
-        if "before any long-term memories are visible" in system_prompt:
+        if "current_user_message" in user_payload:
             response_payload = {
                 "message_scope": "personal_anchored",
                 "scope_reason": "specific patient-contact preference",
