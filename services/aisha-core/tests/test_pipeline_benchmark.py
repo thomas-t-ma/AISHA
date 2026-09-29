@@ -123,6 +123,32 @@ async def test_pipeline_case_distinguishes_retrieval_and_gate_failures():
     assert result["candidate_recall_denominator"] == 2
 
 
+
+@pytest.mark.asyncio
+async def test_pipeline_case_separates_gate_accept_from_final_limit_displacement():
+    beliefs = noisy_synthetic_beliefs(distractor_limit=0)
+    case = next(
+        row
+        for row in pipeline_benchmark_cases()
+        if row.case_id == "pipeline_patient_and_school"
+    )
+    retriever = FakePipelineRetriever(
+        selected_topics={"job_patient_interaction_level"},
+        evaluated=[
+            ("job_patient_interaction_level", True),
+            ("professional_school_goal", True),
+            ("remote_work_preference", True),
+        ],
+    )
+
+    result = await run_pipeline_case(case, beliefs, retriever)
+
+    assert result["gate_false_negatives"] == []
+    assert result["final_limit_displacements"] == ["professional_school_goal"]
+    assert result["gate_false_positives"] == ["remote_work_preference"]
+    assert result["final_false_positives"] == []
+
+
 @pytest.mark.asyncio
 async def test_pipeline_case_marks_expected_memory_absent_from_pool_as_retrieval_miss():
     beliefs = noisy_synthetic_beliefs(distractor_limit=0)
@@ -163,7 +189,9 @@ def test_pipeline_summary_reports_stage_specific_error_counts():
             "candidate_recall_numerator": 0,
             "retrieval_misses": ["a"],
             "gate_false_negatives": [],
+            "final_limit_displacements": [],
             "gate_false_positives": [],
+            "final_false_positives": [],
             "correct_rejections": ["x"],
             "candidate_pool_topics": ["x"],
             "gate_error": None,
@@ -180,7 +208,9 @@ def test_pipeline_summary_reports_stage_specific_error_counts():
             "candidate_recall_numerator": 1,
             "retrieval_misses": [],
             "gate_false_negatives": ["b"],
+            "final_limit_displacements": [],
             "gate_false_positives": [],
+            "final_false_positives": [],
             "correct_rejections": ["x", "y"],
             "candidate_pool_topics": ["b", "x", "y"],
             "gate_error": None,
@@ -197,7 +227,9 @@ def test_pipeline_summary_reports_stage_specific_error_counts():
             "candidate_recall_numerator": 0,
             "retrieval_misses": [],
             "gate_false_negatives": [],
+            "final_limit_displacements": [],
             "gate_false_positives": ["c"],
+            "final_false_positives": ["c"],
             "correct_rejections": ["x"],
             "candidate_pool_topics": ["c", "x"],
             "gate_error": None,
@@ -210,7 +242,9 @@ def test_pipeline_summary_reports_stage_specific_error_counts():
     assert summary["candidate_pool_recall"] == 0.5
     assert summary["retrieval_misses"] == 1
     assert summary["gate_false_negatives"] == 1
+    assert summary["final_limit_displacements"] == 0
     assert summary["gate_false_positives"] == 1
+    assert summary["final_false_positives"] == 1
     assert summary["correct_rejections"] == 4
     assert summary["protocol_failures"] == 0
     assert summary["median_candidate_pool_size"] == 2.0
