@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v3"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v4"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -448,6 +448,8 @@ async def test_ollama_relevance_gate_parses_v3_scope_and_batch_json(monkeypatch)
     system_prompt = requests[0]["messages"][0]["content"]
     assert "GLOBAL SCOPE CLASSIFICATION" in system_prompt
     assert "personal_anchored" in system_prompt
+    assert "MINIMAL SUFFICIENT SET" in system_prompt
+    assert "UNIQUE VALUE" in system_prompt
     assert "MEMORY-BLIND TEST" in system_prompt
     assert gate.status()["message_scope"] == "personal_anchored"
     assert gate.status()["last_metrics"]["total_ms"] == 0.0
