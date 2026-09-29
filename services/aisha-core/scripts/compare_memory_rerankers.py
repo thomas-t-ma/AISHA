@@ -153,6 +153,17 @@ def print_reranker_result(result: dict) -> None:
         f"({summary['clean_query_rate']:.1%})"
     )
     print(
+        f"  valid judgments: {summary['judged_cases']}/{summary['cases']} · "
+        f"exact on valid: {summary['judged_exact_cases']}/{summary['judged_cases']} "
+        f"({summary['judged_exact_accuracy']:.1%}) · "
+        f"protocol failures: {summary['protocol_failures']}"
+    )
+    print(
+        f"  valid precision: {summary['judged_precision']:.1%} · "
+        f"valid recall: {summary['judged_recall']:.1%} · "
+        f"valid negatives: {summary['judged_negative_control_accuracy']:.1%}"
+    )
+    print(
         f"  median gate: {summary['latency_ms']['median_gate']:.0f} ms · "
         f"max gate: {summary['latency_ms']['max_gate']:.0f} ms"
     )
@@ -161,8 +172,10 @@ def print_reranker_result(result: dict) -> None:
     for category, row in summary["category_summary"].items():
         print(
             f"    {category}: {row['exact_cases']}/{row['cases']} exact · "
+            f"valid {row['judged_exact_cases']}/{row['judged_cases']} · "
             f"P {row['precision']:.1%} · R {row['recall']:.1%} · "
-            f"FP {row['false_positive']} · FN {row['false_negative']}"
+            f"FP {row['false_positive']} · FN {row['false_negative']} · "
+            f"ERR {row['protocol_failures']}"
         )
 
     failures = [row for row in result["results"] if not row["exact"]]
@@ -174,6 +187,13 @@ def print_reranker_result(result: dict) -> None:
         expected = ", ".join(row["expected_topics"]) or "none"
         actual = ", ".join(row["actual_topics"]) or "none"
         print(f"    {row['case_id']}: expected [{expected}] actual [{actual}]")
+        if row.get("gate_error"):
+            print(f"      GATE ERROR: {row['gate_error']}")
+        elif row.get("message_scope"):
+            print(
+                f"      scope: {row['message_scope']} · "
+                f"{row.get('scope_reason') or ''}"
+            )
         for candidate in row["candidate_decisions"]:
             marker = "*" if candidate["selected"] else "-"
             print(
