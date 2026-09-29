@@ -489,6 +489,39 @@ comparison reports exact accuracy, precision, recall, negative-control
 accuracy, median retrieval/gate latency, max gate latency, and concise failure
 diagnostics for each model.
 
+
+### Dedicated cross-encoder reranker experiment
+
+AISHA also has an optional benchmark path for purpose-built text rerankers.
+This is intentionally **not** part of the default Core dependency set or
+production memory path yet.
+
+Install the optional benchmark dependency:
+
+```bash
+cd services/aisha-core
+source .venv/bin/activate
+pip install -e '.[rerank]'
+```
+
+Then test Qwen's compact dedicated reranker:
+
+```bash
+python scripts/benchmark_cross_encoder_recall.py \
+  --suite smoke \
+  --model Qwen/Qwen3-Reranker-0.6B \
+  --threshold 0.5
+```
+
+The model is loaded through Sentence Transformers as a true cross-encoder and
+uses Apple MPS when available. The benchmark keeps the same lexical + embedding
+candidate generation and synthetic memory suite; only the final relevance gate
+changes.
+
+If the 0.6B gate clears smoke, run the full suite before considering larger
+Qwen3-Reranker-4B/8B variants. The threshold is configurable because this gate
+returns direct relevance probabilities rather than generating explanatory text.
+
 The benchmark is intentionally synthetic so threshold/reranker experiments
 cannot contaminate AISHA's real autobiographical memory. A failure is not
 automatically a reason to loosen thresholds; inspect whether it was a lexical
