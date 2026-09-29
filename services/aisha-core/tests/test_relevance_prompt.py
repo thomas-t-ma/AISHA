@@ -12,7 +12,7 @@ def test_v6_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v6-two-stage"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v6.1-two-stage-sparse"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
@@ -21,7 +21,7 @@ def test_v6_physically_separates_message_analysis_from_candidate_selection():
     assert "candidate" not in analysis_prompt.lower()
 
     assert "frozen list of personal propositions" in selection_prompt
-    assert "AT MOST ONE candidate" in selection_prompt
+    assert "ZERO or ONE match per proposition" in selection_prompt
     assert "QUALIFIER FIDELITY" in selection_prompt
     assert "Candidate retrieval order and score are not evidence" in selection_prompt
 
@@ -76,22 +76,16 @@ def test_analysis_parser_requires_personal_proposition():
     assert OllamaMemoryRelevanceGate._parse_analysis(invalid) is None
 
 
-def test_selection_parser_allows_at_most_one_memory_per_proposition():
+def test_selection_parser_expands_sparse_matches_and_verifies_topic_index():
     raw = json.dumps(
         {
-            "decisions": [
+            "matches": [
                 {
-                    "index": 0,
-                    "relevant": True,
                     "proposition_index": 0,
+                    "candidate_index": 1,
+                    "candidate_topic_key": "job_patient_interaction_level",
                     "reason": "closest match",
-                },
-                {
-                    "index": 1,
-                    "relevant": False,
-                    "proposition_index": None,
-                    "reason": "broader adjacent memory",
-                },
+                }
             ]
         }
     )
@@ -100,36 +94,32 @@ def test_selection_parser_allows_at_most_one_memory_per_proposition():
         raw,
         expected=2,
         proposition_count=1,
+        candidate_topics=["remote_work_preference", "job_patient_interaction_level"],
     )
 
     assert parsed is not None
-    assert parsed[0]["relevant"] is True
-    assert parsed[0]["proposition_index"] == 0
-    assert parsed[1]["relevant"] is False
+    assert parsed[0]["relevant"] is False
+    assert parsed[1]["relevant"] is True
+    assert parsed[1]["proposition_index"] == 0
 
-    duplicate = json.dumps(
+    wrong_topic_echo = json.dumps(
         {
-            "decisions": [
+            "matches": [
                 {
-                    "index": 0,
-                    "relevant": True,
                     "proposition_index": 0,
-                    "reason": "first match",
-                },
-                {
-                    "index": 1,
-                    "relevant": True,
-                    "proposition_index": 0,
-                    "reason": "second match",
-                },
+                    "candidate_index": 1,
+                    "candidate_topic_key": "remote_work_preference",
+                    "reason": "wrong echoed topic",
+                }
             ]
         }
     )
     assert (
         OllamaMemoryRelevanceGate._parse_selection(
-            duplicate,
+            wrong_topic_echo,
             expected=2,
             proposition_count=1,
+            candidate_topics=["remote_work_preference", "job_patient_interaction_level"],
         )
         is None
     )
@@ -144,7 +134,7 @@ def test_relevance_status_reports_v6_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v6-two-stage"
+    assert status["prompt_version"] == "personal-continuity-v6.1-two-stage-sparse"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []
