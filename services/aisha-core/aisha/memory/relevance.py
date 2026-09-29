@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6.1-two-stage-sparse"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6.2-two-stage-sparse"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -19,13 +19,22 @@ Return ONLY JSON:
 Classify the message from its own words.
 
 personal_anchored:
-- The message itself expresses one or more specific personal situations,
-  preferences, interests, values, decisions, goals, relationships, problems,
-  updates, or ongoing threads.
-- Specific first-person declarative preferences and interests count.
-- For this scope, atomize the message into the smallest independent personal
-  propositions actually expressed. Preserve meaningful qualifiers such as
-  object, subtype, target, domain, time/status, modality, and relation.
+- The message itself expresses one or more specific, MEMORY-ADDRESSABLE personal
+  situations, preferences, interests, values, decisions, goals, relationships,
+  problems, updates, or ongoing threads.
+- Specific first-person declarative preferences and interests count only when
+  the object/domain/thread is identifiable from the message itself.
+- MEMORY-ADDRESSABLE means an unfamiliar reader could describe what kind of
+  personal memory would match WITHOUT seeing any candidate memories.
+- A generic personal desire or state is NOT enough when its object/domain is
+  missing or generic (for example: wanting "more outside work", "a change",
+  "more time", "something better", or "to get back to it").
+- For this scope, extract the smallest INDEPENDENT personal propositions.
+  Keep multiple attributes, evidence, or clauses together when they describe
+  the same underlying subject/preference/goal. Split only when the clauses could
+  reasonably map to different memory threads.
+- Preserve meaningful qualifiers such as object, subtype, target, domain,
+  time/status, modality, and relation.
 
 general_informational:
 - The message asks for general facts, explanations, definitions,
@@ -35,9 +44,14 @@ general_informational:
 
 ambiguous_unanchored:
 - The message sounds personal or continuous but does not independently identify
-  the object, topic, goal, preference, situation, or referent.
+  a MEMORY-ADDRESSABLE object, topic, goal, preference, situation, or referent.
+- This includes generic personal wishes or states whose missing domain could
+  plausibly be completed by several unrelated memories.
 - Vague references such as "that", "it", "something", "more time", "a change",
-  "again", or "this time" do not identify a thread by themselves.
+  "more outside work", "again", or "this time" do not identify a thread by
+  themselves.
+- Do not convert a generic wish into a specific topic such as hobbies, service,
+  career, school, relationships, or health.
 - Do not guess what missing context might be.
 - Return propositions=[].
 
@@ -83,7 +97,9 @@ IMPORTANT OUTPUT CONTRACT:
 - Never renumber candidates.
 - Never output rejected candidates.
 - Never output two matches for the same proposition.
-- Never output one candidate for two propositions.
+- The SAME candidate MAY appear for multiple propositions when one memory
+  faithfully covers all of them. This is not an error and does not duplicate
+  the recalled memory.
 - Candidate retrieval order and score are not evidence of semantic relevance.
 
 If uncertain, return no match for that proposition.
@@ -209,7 +225,6 @@ class OllamaMemoryRelevanceGate:
         if not isinstance(matches, list) or len(matches) > proposition_count:
             return None
 
-        selected_candidates: set[int] = set()
         selected_propositions: set[int] = set()
         selected_by_candidate: dict[int, dict] = {}
 
@@ -229,7 +244,6 @@ class OllamaMemoryRelevanceGate:
                 or not isinstance(candidate_index, int)
                 or candidate_index < 0
                 or candidate_index >= expected
-                or candidate_index in selected_candidates
                 or not isinstance(candidate_topic_key, str)
                 or candidate_topic_key != candidate_topics[candidate_index]
                 or not isinstance(reason, str)
@@ -237,13 +251,17 @@ class OllamaMemoryRelevanceGate:
                 return None
 
             selected_propositions.add(proposition_index)
-            selected_candidates.add(candidate_index)
-            selected_by_candidate[candidate_index] = {
-                "index": candidate_index,
-                "relevant": True,
-                "proposition_index": proposition_index,
-                "reason": reason.strip()[:240],
-            }
+            existing = selected_by_candidate.get(candidate_index)
+            if existing is None:
+                selected_by_candidate[candidate_index] = {
+                    "index": candidate_index,
+                    "relevant": True,
+                    "proposition_index": proposition_index,
+                    "proposition_indices": [proposition_index],
+                    "reason": reason.strip()[:240],
+                }
+            else:
+                existing["proposition_indices"].append(proposition_index)
 
         return [
             selected_by_candidate.get(
@@ -252,6 +270,7 @@ class OllamaMemoryRelevanceGate:
                     "index": index,
                     "relevant": False,
                     "proposition_index": None,
+                    "proposition_indices": [],
                     "reason": "not selected for any frozen proposition",
                 },
             )
