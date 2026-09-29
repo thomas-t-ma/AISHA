@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v4"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v5"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -390,7 +390,7 @@ async def test_below_candidate_floor_does_not_call_relevance_gate(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ollama_relevance_gate_parses_v3_scope_and_batch_json(monkeypatch):
+async def test_ollama_relevance_gate_parses_v5_scope_and_batch_json(monkeypatch):
     requests: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -445,14 +445,84 @@ async def test_ollama_relevance_gate_parses_v3_scope_and_batch_json(monkeypatch)
     assert requests[0]["options"]["num_predict"] == 320
     assert "format" not in requests[0]
     assert requests[0]["keep_alive"] == "30m"
+    candidate_payload = requests[0]["messages"][1]["content"]
+    candidate_payload = json.loads(candidate_payload)["candidates"][0]
+    assert "embedding_score" not in candidate_payload
+    assert "lexical_score" not in candidate_payload
+    assert "candidate_sources" not in candidate_payload
     system_prompt = requests[0]["messages"][0]["content"]
     assert "GLOBAL SCOPE CLASSIFICATION" in system_prompt
     assert "personal_anchored" in system_prompt
-    assert "MINIMAL SUFFICIENT SET" in system_prompt
-    assert "UNIQUE VALUE" in system_prompt
+    assert "MINIMAL, MAXIMALLY FAITHFUL SET" in system_prompt
+    assert "QUALIFIER FIDELITY" in system_prompt
     assert "MEMORY-BLIND TEST" in system_prompt
     assert gate.status()["message_scope"] == "personal_anchored"
     assert gate.status()["last_metrics"]["total_ms"] == 0.0
+
+
+
+@pytest.mark.asyncio
+async def test_relevance_gate_retries_once_after_invalid_json(monkeypatch):
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(200, json={"message": {"content": "not json"}})
+        return httpx.Response(
+            200,
+            json={
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "message_scope": "personal_anchored",
+                            "scope_reason": "specific personal work preference",
+                            "decisions": [
+                                {
+                                    "index": 0,
+                                    "relevant": True,
+                                    "reason": "direct proposition match",
+                                }
+                            ],
+                        }
+                    )
+                }
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: real_client(*args, transport=transport, **kwargs),
+    )
+
+    gate = OllamaMemoryRelevanceGate(
+        model="qwen3.5:35b-mlx",
+        base_url="http://127.0.0.1:11434",
+    )
+    decisions = await gate.judge(
+        "I want more patient interaction at work.",
+        [
+            {
+                "belief": verified_belief(
+                    "b1",
+                    "job_patient_interaction_level",
+                    "The user's current job involves little patient interaction.",
+                ),
+                "semantic_score": 0.9,
+                "lexical_score": 20.0,
+                "candidate_sources": ["semantic", "lexical"],
+            }
+        ],
+    )
+
+    assert calls == 2
+    assert decisions[0]["relevant"] is True
+    assert gate.last_error is None
+    assert gate.status()["last_metrics"]["attempts"] == 2
 
 
 @pytest.mark.asyncio
