@@ -481,6 +481,47 @@ python scripts/compare_memory_rerankers.py \
   --model qwen3.5:35b-mlx
 ```
 
+
+On Apple Silicon, AISHA can also benchmark a dedicated MLX cross-encoder
+reranker instead of a generative chat model. This is an optional dependency so
+Linux/Core CI remains hardware agnostic.
+
+Install the Mac-only extra:
+
+```bash
+cd services/aisha-core
+source .venv/bin/activate
+pip install -e '.[dev,mac-memory]'
+```
+
+Then run the dedicated Qwen3 reranker smoke suite:
+
+```bash
+python scripts/benchmark_mlx_memory_reranker.py \
+  --suite smoke \
+  --model mlx-community/Qwen3-Reranker-0.6B-4bit \
+  --threshold 0.50
+```
+
+The model is lazy-loaded through `mlx-lm`; the first run may download the
+~331 MB model from Hugging Face. The implementation follows the model card's
+yes/no-logit scoring recipe and uses a custom AISHA instruction that defines
+relevance as the same active personal proposition rather than broad topical
+similarity. No explanatory text is generated.
+
+If smoke clears all three cases, run:
+
+```bash
+python scripts/benchmark_mlx_memory_reranker.py \
+  --suite full \
+  --model mlx-community/Qwen3-Reranker-0.6B-4bit \
+  --threshold 0.50 \
+  --output /tmp/aisha-memory-reranker-mlx.json
+```
+
+This path is benchmark-only until it proves quality parity with the 35B
+generative gate.
+
 The smoke suite contains the three cases that currently best separate gate
 quality: an indirect patient-contact paraphrase, a genuine two-memory work +
 volunteering turn, and a general medical-school question that must not trigger
@@ -488,39 +529,6 @@ personal continuity. Use `--suite full` after a model clears smoke. The
 comparison reports exact accuracy, precision, recall, negative-control
 accuracy, median retrieval/gate latency, max gate latency, and concise failure
 diagnostics for each model.
-
-
-### Dedicated cross-encoder reranker experiment
-
-AISHA also has an optional benchmark path for purpose-built text rerankers.
-This is intentionally **not** part of the default Core dependency set or
-production memory path yet.
-
-Install the optional benchmark dependency:
-
-```bash
-cd services/aisha-core
-source .venv/bin/activate
-pip install -e '.[rerank]'
-```
-
-Then test Qwen's compact dedicated reranker:
-
-```bash
-python scripts/benchmark_cross_encoder_recall.py \
-  --suite smoke \
-  --model Qwen/Qwen3-Reranker-0.6B \
-  --threshold 0.5
-```
-
-The model is loaded through Sentence Transformers as a true cross-encoder and
-uses Apple MPS when available. The benchmark keeps the same lexical + embedding
-candidate generation and synthetic memory suite; only the final relevance gate
-changes.
-
-If the 0.6B gate clears smoke, run the full suite before considering larger
-Qwen3-Reranker-4B/8B variants. The threshold is configurable because this gate
-returns direct relevance probabilities rather than generating explanatory text.
 
 The benchmark is intentionally synthetic so threshold/reranker experiments
 cannot contaminate AISHA's real autobiographical memory. A failure is not
