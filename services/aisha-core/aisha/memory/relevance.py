@@ -5,84 +5,83 @@ import json
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v2"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v3"
 
 RELEVANCE_SYSTEM = """You are a conservative relevance judge for conversational memory.
 Your job is to prevent irrelevant personal memories from leaking into a response.
 
-For each candidate, decide whether its specific personal proposition is needed
-or clearly useful for responding to the user's CURRENT message.
+FIRST classify the CURRENT message itself, without using candidate memories to
+fill in missing context. Only after that may you judge individual candidates.
 
 Return ONLY JSON:
-{"decisions":[{"index":0,"relevant":true|false,"reason":"<=12 words"}]}
+{"message_scope":"personal_anchored|general_informational|ambiguous_unanchored",
+ "scope_reason":"<=12 words",
+ "decisions":[{"index":0,"relevant":true|false,"reason":"<=12 words"}]}
 
-CORE RULE: the CURRENT message must supply the evidence for relevance. The
-candidate memory may confirm or add known detail, but it may NOT supply the
-missing topic, referent, motive, or situation that makes itself seem relevant.
+GLOBAL SCOPE CLASSIFICATION
 
-Use this MEMORY-BLIND TEST for every candidate:
+personal_anchored:
+- The CURRENT message itself identifies a specific personal situation,
+  preference, decision, goal, relationship, problem, or ongoing thread.
+- It can name it directly or strongly paraphrase it.
+- Examples: "I want more patient interaction in my current job"; "My weekday
+  schedule leaves no room for volunteering"; "I still plan to apply to medical
+  school"; "For my PC I don't want mystery components."
+
+general_informational:
+- The message asks for general facts, explanation, advice, definitions,
+  recommendations, statistics, or category-level information without grounding
+  the question in the user's own specific situation.
+- Topic overlap with a candidate memory NEVER makes a general question personal.
+- Examples: "Why do some healthcare jobs have little patient contact?"; "What
+  clay is easiest for beginners?"; "What switch types are best for an office
+  keyboard?"; "How is AI used in clinical research?"
+- A general question remains general even when the user happens to have a
+  personal memory about exactly that topic.
+
+ambiguous_unanchored:
+- The message is first-person or continuity-sounding but does not independently
+  identify which personal thread it refers to.
+- Vague phrases such as "that project", "something quieter", "cheap out again",
+  "more meaningful", "help people", or "not enough time after work" are not
+  enough by themselves.
+- Words such as "again", "still", "this time", "that", or "the usual" do NOT
+  permit you to use candidate memory as the missing referent.
+
+HARD GLOBAL RULE:
+- If message_scope is general_informational, EVERY decision MUST be false.
+- If message_scope is ambiguous_unanchored, EVERY decision MUST be false.
+- Only personal_anchored messages may have any true decisions.
+- Determine message_scope from the CURRENT message BEFORE considering which
+  memories happen to be available.
+
+CANDIDATE RULES FOR personal_anchored MESSAGES
+
+Use this MEMORY-BLIND TEST for each candidate:
 1. Hide the candidate memory.
 2. Read only the CURRENT message.
-3. Ask what specific personal situation, preference, decision, goal, problem,
-   relationship, or unresolved thread the message itself identifies.
-4. Reveal the candidate. Accept it only if its defining proposition matches that
-   independently identifiable personal thread.
+3. Identify the specific personal proposition or thread present in the message.
+4. Reveal the candidate.
+5. Accept only if the candidate's DEFINING PROPOSITION matches that independently
+   identified thread and materially improves the response.
 
-If the current message does not identify the thread without help from the
-candidate, REJECT it.
+The candidate may confirm or add known detail, but it may NOT supply the missing
+topic, referent, motive, domain, or situation that makes itself seem relevant.
 
-GENERAL INFORMATION RULE:
-- A general factual, explanatory, educational, demographic, market, technical,
-  travel, food, hobby, or "how does X work?" question is NOT personal continuity
-  merely because the user has a memory about X.
-- If the question can be answered normally without knowing the candidate memory,
-  reject the memory.
-- Do not reinterpret a general question as secretly being about the user's own
-  history, plans, preferences, or motives.
-- Example: "How does medical-school accreditation work?" does NOT activate a
-  personal medical-school application goal.
-- Example: "What clay is easiest for beginners?" does NOT activate a pottery
-  hobby merely because the user likes pottery.
-- Example: "Why do some healthcare jobs have little patient contact?" does NOT
-  activate the user's own patient-contact history.
+Reject:
+- merely topical or lexical similarity;
+- adjacent personal threads;
+- broad motives used to infer narrower memories;
+- a memory that merely explains why the user might have asked;
+- optional callbacks that do not materially help answer the message.
 
-AMBIGUITY RULE:
-- Vague phrases such as "that project", "something quieter", "cheap out again",
-  "more meaningful", "help people", or "not enough time after work" do not
-  identify a memory thread by themselves.
-- Never use the candidate memory itself to resolve an ambiguous pronoun,
-  ellipsis, object, motive, or domain.
-- If two or more plausible personal memories could explain the message, reject
-  each unless the CURRENT message contains an independent anchor that selects it.
-- Recent conversation context could resolve ambiguity, but no such context is
-  provided to this judge unless it appears in the CURRENT message.
+A broad motive does not activate a narrower memory. "I want meaningful work"
+does not by itself activate low patient interaction, medical school, research,
+volunteering, or remote-work memories.
 
-PERSONAL CONTINUITY RULE:
-- First identify the candidate's DEFINING PROPOSITION: the specific relation it
-  claims about the user, not its broad subject.
-- Accept when the CURRENT message explicitly states, strongly paraphrases,
-  updates, contradicts, questions, or clearly continues that defining
-  proposition.
-- Different wording is fine; invented causal links are not.
-- A broad motive does not activate a narrower memory. "I want meaningful work"
-  does not by itself activate low patient interaction, medical school, research,
-  volunteering, or remote-work memories.
-- Do not turn one personal thread into an adjacent one. Wanting more patient
-  contact does not imply a volunteering constraint. Planning medical school does
-  not imply dissatisfaction with patient contact.
-- For multi-topic messages, accept each memory only when its own defining
-  proposition is independently present.
-
-Before accepting, require BOTH:
-A. THREAD EVIDENCE: the current message itself identifies the same personal
-   proposition or thread without importing facts from the candidate.
-B. RESPONSE VALUE: knowing the candidate would materially clarify, complete, or
-   improve the response to this message rather than merely provide an optional
-   callback.
-
-Reject merely topical, associative, motivational, biographical, causal, or
-"could be related" similarity. A memory explaining why the user might have asked
-a question is not enough. If uncertain, prefer false.
+For multi-topic personal messages, accept each memory only when its own defining
+proposition is independently present. Do not collapse two explicit clauses into
+one: a message can legitimately activate multiple memories.
 
 Keep each reason extremely short (12 words maximum). Good rejection reasons:
 "general question, not personal continuity", "candidate supplies missing
@@ -90,9 +89,9 @@ referent", "broad motive only", "adjacent personal thread", "ambiguous without
 current-message anchor".
 
 Judge RELEVANCE only. Do not decide whether the memory is true, current, or
-factually verified; another subsystem handles evidence integrity.
+factually verified; another subsystem handles evidence integrity. If uncertain,
+prefer false.
 """
-
 
 class OllamaMemoryRelevanceGate:
     def __init__(
@@ -107,15 +106,19 @@ class OllamaMemoryRelevanceGate:
         self.keep_alive = keep_alive
         self.last_error: str | None = None
         self.last_decisions: list[dict] = []
+        self.last_message_scope: str | None = None
+        self.last_scope_reason: str | None = None
         self.last_metrics: dict = {}
 
     def reset(self) -> None:
         self.last_error = None
         self.last_decisions = []
+        self.last_message_scope = None
+        self.last_scope_reason = None
         self.last_metrics = {}
 
     @staticmethod
-    def _parse(raw: str, expected: int) -> list[dict] | None:
+    def _parse(raw: str, expected: int) -> dict | None:
         raw = raw.strip()
         fence = chr(96) * 3
         if raw.startswith(fence) and raw.endswith(fence):
@@ -128,6 +131,17 @@ class OllamaMemoryRelevanceGate:
             return None
         if not isinstance(payload, dict):
             return None
+
+        message_scope = payload.get("message_scope")
+        scope_reason = payload.get("scope_reason")
+        valid_scopes = {
+            "personal_anchored",
+            "general_informational",
+            "ambiguous_unanchored",
+        }
+        if message_scope not in valid_scopes or not isinstance(scope_reason, str):
+            return None
+
         decisions = payload.get("decisions")
         if not isinstance(decisions, list) or len(decisions) != expected:
             return None
@@ -157,11 +171,36 @@ class OllamaMemoryRelevanceGate:
             })
 
         parsed.sort(key=lambda row: row["index"])
-        return parsed if [row["index"] for row in parsed] == list(range(expected)) else None
+        if [row["index"] for row in parsed] != list(range(expected)):
+            return None
+
+        # Enforce the model's global scope classification. Candidate-level
+        # topical attraction cannot override a general or ambiguous message.
+        if message_scope != "personal_anchored":
+            parsed = [
+                {
+                    "index": row["index"],
+                    "relevant": False,
+                    "reason": (
+                        "general question, not personal continuity"
+                        if message_scope == "general_informational"
+                        else "ambiguous without current-message anchor"
+                    ),
+                }
+                for row in parsed
+            ]
+
+        return {
+            "message_scope": message_scope,
+            "scope_reason": scope_reason.strip()[:240],
+            "decisions": parsed,
+        }
 
     async def judge(self, user_text: str, candidates: list[dict]) -> list[dict]:
         if not candidates:
             self.last_decisions = []
+            self.last_message_scope = None
+            self.last_scope_reason = None
             self.last_error = None
             return []
 
@@ -222,9 +261,12 @@ class OllamaMemoryRelevanceGate:
             raw = data.get("message", {}).get("content")
             if not isinstance(raw, str):
                 raise TypeError("relevance_gate_missing_response")
-            decisions = self._parse(raw, len(candidates))
-            if decisions is None:
+            parsed = self._parse(raw, len(candidates))
+            if parsed is None:
                 raise ValueError("relevance_gate_invalid_response")
+            decisions = parsed["decisions"]
+            self.last_message_scope = str(parsed["message_scope"])
+            self.last_scope_reason = str(parsed["scope_reason"])
             self.last_decisions = decisions
             self.last_error = None
             return decisions
@@ -237,6 +279,8 @@ class OllamaMemoryRelevanceGate:
                 }
                 for index in range(len(candidates))
             ]
+            self.last_message_scope = None
+            self.last_scope_reason = None
             self.last_metrics = {}
             self.last_error = f"{type(exc).__name__}: {exc}"
             return self.last_decisions
@@ -246,6 +290,8 @@ class OllamaMemoryRelevanceGate:
             "enabled": True,
             "model": self.model,
             "prompt_version": RELEVANCE_GATE_PROMPT_VERSION,
+            "message_scope": self.last_message_scope,
+            "scope_reason": self.last_scope_reason,
             "last_error": self.last_error,
             "last_decisions": self.last_decisions,
             "last_metrics": self.last_metrics,
