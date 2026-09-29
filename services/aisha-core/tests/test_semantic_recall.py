@@ -451,7 +451,7 @@ async def test_ollama_relevance_gate_parses_v5_scope_and_batch_json(monkeypatch)
     assert "lexical_score" not in candidate_payload
     assert "candidate_sources" not in candidate_payload
     system_prompt = requests[0]["messages"][0]["content"]
-    assert "GLOBAL SCOPE CLASSIFICATION" in system_prompt
+    assert "STEP 1 — CLASSIFY THE CURRENT MESSAGE WITHOUT MEMORY" in system_prompt
     assert "personal_anchored" in system_prompt
     assert "MINIMAL, MAXIMALLY FAITHFUL SET" in system_prompt
     assert "QUALIFIER FIDELITY" in system_prompt
