@@ -390,7 +390,7 @@ async def test_below_candidate_floor_does_not_call_relevance_gate(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_ollama_relevance_gate_parses_strict_batch_json(monkeypatch):
+async def test_ollama_relevance_gate_parses_v3_scope_and_batch_json(monkeypatch):
     requests: list[dict] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -401,11 +401,13 @@ async def test_ollama_relevance_gate_parses_strict_batch_json(monkeypatch):
             json={
                 "message": {
                     "content": json.dumps({
+                        "message_scope": "personal_anchored",
+                        "scope_reason": "explicit personal patient-contact concern",
                         "decisions": [{
                             "index": 0,
                             "relevant": True,
                             "reason": "same underlying patient-contact concern",
-                        }]
+                        }],
                     })
                 }
             },
@@ -440,12 +442,14 @@ async def test_ollama_relevance_gate_parses_strict_batch_json(monkeypatch):
     assert decisions[0]["relevant"] is True
     assert requests[0]["think"] is False
     assert requests[0]["options"]["temperature"] == 0
-    assert requests[0]["options"]["num_predict"] == 180
+    assert requests[0]["options"]["num_predict"] == 320
+    assert "format" not in requests[0]
     assert requests[0]["keep_alive"] == "30m"
     system_prompt = requests[0]["messages"][0]["content"]
-    assert "DEFINING PROPOSITION" in system_prompt
-    assert "Do not turn one personal thread into a second adjacent thread" in system_prompt
-    assert "12 words maximum" in system_prompt
+    assert "GLOBAL SCOPE CLASSIFICATION" in system_prompt
+    assert "personal_anchored" in system_prompt
+    assert "MEMORY-BLIND TEST" in system_prompt
+    assert gate.status()["message_scope"] == "personal_anchored"
     assert gate.status()["last_metrics"]["total_ms"] == 0.0
 
 
