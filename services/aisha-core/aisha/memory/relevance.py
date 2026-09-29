@@ -220,7 +220,9 @@ class OllamaMemoryRelevanceGate:
             "model": self.model,
             "stream": False,
             "think": False,
-            "format": "json",
+            # The local MLX Ollama-compatible /api/chat endpoint used by AISHA
+            # does not implement Ollama's structured-output "format" option.
+            # The system prompt still requires raw JSON and _parse validates it.
             "options": {
                 "temperature": 0,
                 "num_predict": 320,
