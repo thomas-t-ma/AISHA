@@ -111,6 +111,8 @@ class OllamaMemoryRelevanceGate:
         self.last_scope_reason: str | None = None
         self.last_propositions: list[dict] = []
         self.last_metrics: dict = {}
+        self.last_protocol_phase: str | None = None
+        self.last_protocol_response_preview: str | None = None
 
     def reset(self) -> None:
         self.last_error = None
@@ -119,6 +121,8 @@ class OllamaMemoryRelevanceGate:
         self.last_scope_reason = None
         self.last_propositions = []
         self.last_metrics = {}
+        self.last_protocol_phase = None
+        self.last_protocol_response_preview = None
 
     @staticmethod
     def _strip_fence(raw: str) -> str:
@@ -271,6 +275,7 @@ class OllamaMemoryRelevanceGate:
     async def _run_phase(
         self,
         *,
+        phase: str,
         system_prompt: str,
         user_payload: dict,
         num_predict: int,
@@ -308,14 +313,24 @@ class OllamaMemoryRelevanceGate:
 
                 raw = data.get("message", {}).get("content")
                 if not isinstance(raw, str):
-                    final_error = TypeError("relevance_gate_missing_response")
+                    self.last_protocol_phase = phase
+                    self.last_protocol_response_preview = None
+                    final_error = TypeError(
+                        f"relevance_gate_missing_response:{phase}"
+                    )
                     continue
 
                 parsed = parser(raw)
                 if parsed is None:
-                    final_error = ValueError("relevance_gate_invalid_response")
+                    self.last_protocol_phase = phase
+                    self.last_protocol_response_preview = raw.strip()[:1000]
+                    final_error = ValueError(
+                        f"relevance_gate_invalid_response:{phase}"
+                    )
                     continue
 
+                self.last_protocol_phase = None
+                self.last_protocol_response_preview = None
                 return parsed, self._metrics(data, attempt + 1)
             except Exception as exc:  # noqa: BLE001 - recall must never break chat
                 final_error = exc
@@ -381,6 +396,7 @@ class OllamaMemoryRelevanceGate:
         # Phase 1 is physically memory-blind: no candidate content is included.
         try:
             analysis, analysis_metrics = await self._run_phase(
+                phase="analysis",
                 system_prompt=MESSAGE_ANALYSIS_SYSTEM,
                 user_payload={"current_user_message": user_text},
                 num_predict=180,
@@ -425,6 +441,7 @@ class OllamaMemoryRelevanceGate:
 
         try:
             selection, selection_metrics = await self._run_phase(
+                phase="selection",
                 system_prompt=CANDIDATE_SELECTION_SYSTEM,
                 user_payload={
                     "propositions": self.last_propositions,
@@ -462,6 +479,8 @@ class OllamaMemoryRelevanceGate:
             "scope_reason": self.last_scope_reason,
             "propositions": self.last_propositions,
             "last_error": self.last_error,
+            "protocol_phase": self.last_protocol_phase,
+            "protocol_response_preview": self.last_protocol_response_preview,
             "last_decisions": self.last_decisions,
             "last_metrics": self.last_metrics,
         }
