@@ -3,9 +3,11 @@ from __future__ import annotations
 import pytest
 
 from aisha.memory.benchmark import synthetic_beliefs
+from aisha.memory.relevance import RELEVANCE_SYSTEM
 from aisha.memory.reranker_benchmark import (
     SMOKE_RERANKER_CASE_IDS,
     reranker_benchmark_cases,
+    reranker_holdout_cases,
     run_reranker_case,
     summarize_reranker_results,
 )
@@ -56,6 +58,31 @@ def test_every_reranker_candidate_topic_exists_in_synthetic_beliefs():
     known = {belief["topic_key"] for belief in synthetic_beliefs()}
 
     for case in reranker_benchmark_cases():
+        assert set(case.candidate_topics) <= known
+        assert set(case.expected_topics) <= set(case.candidate_topics)
+
+
+
+def test_holdout_reranker_suite_is_balanced_unique_and_prompt_unseen():
+    cases = reranker_holdout_cases()
+    normalized_prompt = " ".join(RELEVANCE_SYSTEM.lower().split())
+
+    assert len(cases) == 32
+    assert len({case.case_id for case in cases}) == 32
+    assert sum(1 for case in cases if case.expected_topics) == 16
+    assert sum(1 for case in cases if not case.expected_topics) == 16
+    assert all(case.case_id.startswith("holdout_") for case in cases)
+    assert all(len(case.candidate_topics) == 6 for case in cases)
+
+    for case in cases:
+        normalized_text = " ".join(case.text.lower().split())
+        assert normalized_text not in normalized_prompt
+
+
+def test_every_holdout_candidate_and_expected_topic_exists():
+    known = {belief["topic_key"] for belief in synthetic_beliefs()}
+
+    for case in reranker_holdout_cases():
         assert set(case.candidate_topics) <= known
         assert set(case.expected_topics) <= set(case.candidate_topics)
 
