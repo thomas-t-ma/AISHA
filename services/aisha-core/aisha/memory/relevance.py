@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6-two-stage"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6.1-two-stage-sparse"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -50,16 +50,19 @@ is independently identifiable, prefer ambiguous_unanchored.
 CANDIDATE_SELECTION_SYSTEM = """You map candidate memories onto a frozen list of
 personal propositions extracted earlier WITHOUT access to any memories.
 
-Return ONLY JSON:
-{"decisions":[
-  {"index":0,"relevant":true|false,"proposition_index":0|null,
-   "reason":"<=12 words"}
+Return ONLY sparse JSON:
+{"matches":[
+  {"proposition_index":0,"candidate_index":3,
+   "candidate_topic_key":"example_topic","reason":"<=12 words"}
 ]}
+
+Return ZERO or ONE match per proposition. If no candidate faithfully matches a
+proposition, omit that proposition from matches.
 
 The proposition list is authoritative. Candidate memories may NEVER create,
 reinterpret, broaden, narrow, or add a proposition.
 
-For each proposition, select AT MOST ONE candidate: the memory whose DEFINING
+For each proposition, choose AT MOST ONE candidate: the memory whose DEFINING
 PROPOSITION is the closest faithful semantic match.
 
 Require QUALIFIER FIDELITY:
@@ -74,12 +77,16 @@ Require QUALIFIER FIDELITY:
 Reject candidates that are merely compatible, adjacent, redundant, background,
 a subset/superset, a plausible cause/consequence, or an inferred companion.
 
-If no candidate faithfully matches a proposition, select none for it.
-A candidate is relevant=true only when proposition_index names the proposition
-it uniquely and best matches. Every other candidate must be false.
+IMPORTANT OUTPUT CONTRACT:
+- candidate_index MUST be the exact index shown on the chosen candidate.
+- candidate_topic_key MUST exactly echo that candidate's topic_key.
+- Never renumber candidates.
+- Never output rejected candidates.
+- Never output two matches for the same proposition.
+- Never output one candidate for two propositions.
+- Candidate retrieval order and score are not evidence of semantic relevance.
 
-Candidate retrieval order and score are not evidence of semantic relevance.
-If uncertain, prefer false.
+If uncertain, return no match for that proposition.
 """
 
 # Backward-compatible inspection surface for tests/status tooling. Production
@@ -185,6 +192,7 @@ class OllamaMemoryRelevanceGate:
         *,
         expected: int,
         proposition_count: int,
+        candidate_topics: list[str],
     ) -> list[dict] | None:
         try:
             payload = json.loads(cls._strip_fence(raw))
@@ -193,62 +201,58 @@ class OllamaMemoryRelevanceGate:
         if not isinstance(payload, dict):
             return None
 
-        decisions = payload.get("decisions")
-        if not isinstance(decisions, list) or len(decisions) != expected:
+        matches = payload.get("matches")
+        if not isinstance(matches, list) or len(matches) > proposition_count:
             return None
 
-        parsed: list[dict] = []
-        seen_candidates: set[int] = set()
+        selected_candidates: set[int] = set()
         selected_propositions: set[int] = set()
+        selected_by_candidate: dict[int, dict] = {}
 
-        for decision in decisions:
-            if not isinstance(decision, dict):
+        for match in matches:
+            if not isinstance(match, dict):
                 return None
-            index = decision.get("index")
-            relevant = decision.get("relevant")
-            proposition_index = decision.get("proposition_index")
-            reason = decision.get("reason")
+            proposition_index = match.get("proposition_index")
+            candidate_index = match.get("candidate_index")
+            candidate_topic_key = match.get("candidate_topic_key")
+            reason = match.get("reason")
 
             if (
-                not isinstance(index, int)
-                or index < 0
-                or index >= expected
-                or index in seen_candidates
-                or type(relevant) is not bool
+                not isinstance(proposition_index, int)
+                or proposition_index < 0
+                or proposition_index >= proposition_count
+                or proposition_index in selected_propositions
+                or not isinstance(candidate_index, int)
+                or candidate_index < 0
+                or candidate_index >= expected
+                or candidate_index in selected_candidates
+                or not isinstance(candidate_topic_key, str)
+                or candidate_topic_key != candidate_topics[candidate_index]
                 or not isinstance(reason, str)
             ):
                 return None
 
-            if relevant:
-                if (
-                    not isinstance(proposition_index, int)
-                    or proposition_index < 0
-                    or proposition_index >= proposition_count
-                    or proposition_index in selected_propositions
-                ):
-                    return None
-                selected_propositions.add(proposition_index)
-            elif proposition_index is not None and (
-                not isinstance(proposition_index, int)
-                or proposition_index < 0
-                or proposition_index >= proposition_count
-            ):
-                return None
+            selected_propositions.add(proposition_index)
+            selected_candidates.add(candidate_index)
+            selected_by_candidate[candidate_index] = {
+                "index": candidate_index,
+                "relevant": True,
+                "proposition_index": proposition_index,
+                "reason": reason.strip()[:240],
+            }
 
-            seen_candidates.add(index)
-            parsed.append(
+        return [
+            selected_by_candidate.get(
+                index,
                 {
                     "index": index,
-                    "relevant": relevant,
-                    "proposition_index": proposition_index if relevant else None,
-                    "reason": reason.strip()[:240],
-                }
+                    "relevant": False,
+                    "proposition_index": None,
+                    "reason": "not selected for any frozen proposition",
+                },
             )
-
-        parsed.sort(key=lambda row: row["index"])
-        if [row["index"] for row in parsed] != list(range(expected)):
-            return None
-        return parsed
+            for index in range(expected)
+        ]
 
     @staticmethod
     def _metrics(data: dict, attempts: int) -> dict:
@@ -431,6 +435,10 @@ class OllamaMemoryRelevanceGate:
                     raw,
                     expected=len(candidates),
                     proposition_count=len(self.last_propositions),
+                    candidate_topics=[
+                        str(candidate["belief"].get("topic_key", ""))
+                        for candidate in candidates
+                    ],
                 ),
             )
         except Exception as exc:  # noqa: BLE001 - recall must never break chat
