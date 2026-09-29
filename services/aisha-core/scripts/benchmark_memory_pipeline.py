@@ -184,6 +184,18 @@ def print_result(result: dict) -> None:
             )
         if row["gate_false_positives"]:
             print(f"      GATE FALSE POSITIVE: {', '.join(row['gate_false_positives'])}")
+        gate_status = row.get("relevance_gate", {})
+        if gate_status.get("message_scope"):
+            print(
+                f"      scope: {gate_status.get('message_scope')} · "
+                f"{gate_status.get('scope_reason') or ''}"
+            )
+        propositions = gate_status.get("propositions") or []
+        for proposition in propositions:
+            print(
+                f"      proposition {proposition.get('index')}: "
+                f"{proposition.get('text')}"
+            )
         if row.get("gate_error"):
             print(f"      GATE ERROR: {row['gate_error']}")
 
