@@ -29,10 +29,18 @@ personal_anchored:
 - A generic personal desire or state is NOT enough when its object/domain is
   missing or generic (for example: wanting "more outside work", "a change",
   "more time", "something better", or "to get back to it").
-- For this scope, extract the smallest INDEPENDENT personal propositions.
-  Keep multiple attributes, evidence, or clauses together when they describe
-  the same underlying subject/preference/goal. Split only when the clauses could
-  reasonably map to different memory threads.
+- For this scope, extract ONE proposition per independently storable personal
+  fact. A proposition should correspond to one memory-addressable claim.
+- SPLIT clauses when they express different objects, predicates, goals,
+  decisions, or preferences and each clause could stand alone as a meaningful
+  long-term memory.
+- Do NOT merge distinct facts merely because one explains, motivates, enables,
+  constrains, or gives the timing/purpose of the other.
+- Purpose/time clauses can contain a second explicit personal fact. If both the
+  main clause and that clause are independently memory-addressable, emit both.
+- KEEP clauses together when they are only multiple qualifiers or attributes of
+  the SAME object and relation, so splitting them would create fragments rather
+  than distinct memories.
 - Preserve meaningful qualifiers such as object, subtype, target, domain,
   time/status, modality, and relation.
 
