@@ -10,13 +10,17 @@ from aisha.memory.relevance import (
 def test_relevance_prompt_requires_global_scope_before_candidate_judgment():
     normalized_prompt = " ".join(RELEVANCE_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v3"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v4"
     assert "GLOBAL SCOPE CLASSIFICATION" in normalized_prompt
     assert "personal_anchored" in normalized_prompt
     assert "general_informational" in normalized_prompt
     assert "ambiguous_unanchored" in normalized_prompt
     assert "EVERY decision MUST be false" in normalized_prompt
     assert "candidate supplies missing referent" in normalized_prompt
+    assert "MINIMAL SUFFICIENT SET" in normalized_prompt
+    assert "UNIQUE VALUE" in normalized_prompt
+    assert "redundant with stronger match" in normalized_prompt
+    assert "specific first-person preference or interest statement" in normalized_prompt
 
 
 def test_relevance_parser_enforces_nonpersonal_scope():
@@ -66,6 +70,6 @@ def test_relevance_status_reports_prompt_version_and_scope_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v3"
+    assert status["prompt_version"] == "personal-continuity-v4"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
