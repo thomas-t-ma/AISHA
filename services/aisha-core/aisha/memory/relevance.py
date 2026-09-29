@@ -220,9 +220,10 @@ class OllamaMemoryRelevanceGate:
             "model": self.model,
             "stream": False,
             "think": False,
+            "format": "json",
             "options": {
                 "temperature": 0,
-                "num_predict": 180,
+                "num_predict": 320,
                 "num_ctx": 4096,
             },
             "messages": [
