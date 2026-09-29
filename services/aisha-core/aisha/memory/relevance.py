@@ -1,125 +1,91 @@
-"""Second-stage semantic relevance gate for memory recall."""
+"""Two-stage semantic relevance gate for memory recall."""
 from __future__ import annotations
 
 import json
+from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v5"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6-two-stage"
 
-RELEVANCE_SYSTEM = """You are a conservative semantic judge for conversational memory.
-Your job is to select the MINIMAL, MAXIMALLY FAITHFUL SET of personal memories
-that directly matches the user's CURRENT message.
-
-Judge candidates JOINTLY. Candidate retrieval rank or score is not evidence of
-relevance; judge only the meaning of the current message and memory proposition.
+MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
+long-term memories are visible.
 
 Return ONLY JSON:
 {"message_scope":"personal_anchored|general_informational|ambiguous_unanchored",
  "scope_reason":"<=12 words",
- "decisions":[{"index":0,"relevant":true|false,"reason":"<=12 words"}]}
+ "propositions":[{"index":0,"text":"explicit personal proposition"}]}
 
-STEP 1 — CLASSIFY THE CURRENT MESSAGE WITHOUT MEMORY
+Classify the message from its own words.
 
 personal_anchored:
-- The message itself expresses a specific personal situation, preference,
-  interest, value, decision, goal, relationship, problem, update, or ongoing
-  thread.
-- Specific first-person declarative preferences and interests count as personal
-  anchors even when the user is not asking for advice.
+- The message itself expresses one or more specific personal situations,
+  preferences, interests, values, decisions, goals, relationships, problems,
+  updates, or ongoing threads.
+- Specific first-person declarative preferences and interests count.
+- For this scope, atomize the message into the smallest independent personal
+  propositions actually expressed. Preserve meaningful qualifiers such as
+  object, subtype, target, domain, time/status, modality, and relation.
 
 general_informational:
 - The message asks for general facts, explanations, definitions,
   recommendations, statistics, or category-level information without grounding
   the request in the user's own specific situation.
-- Topic overlap with personal memory never turns a general question personal.
+- Return propositions=[].
 
 ambiguous_unanchored:
 - The message sounds personal or continuous but does not independently identify
-  which personal thread it refers to.
+  the object, topic, goal, preference, situation, or referent.
 - Vague references such as "that", "it", "something", "more time", "a change",
-  "again", or "this time" cannot be resolved from candidate memory.
+  "again", or "this time" do not identify a thread by themselves.
+- Do not guess what missing context might be.
+- Return propositions=[].
 
-HARD SCOPE RULE:
-- general_informational => every decision false.
-- ambiguous_unanchored => every decision false.
-- Only personal_anchored may select memories.
+For personal_anchored, include only propositions stated by the message itself.
+Do not add likely causes, consequences, motives, background, or inferred goals.
+Use at most four propositions. If uncertain whether a specific personal thread
+is independently identifiable, prefer ambiguous_unanchored.
+"""
 
-STEP 2 — ATOMIZE THE PERSONAL MESSAGE
+CANDIDATE_SELECTION_SYSTEM = """You map candidate memories onto a frozen list of
+personal propositions extracted earlier WITHOUT access to any memories.
 
-Before looking at candidates, split the CURRENT message into the smallest
-independent personal propositions actually expressed. Treat coordinated clauses
-as separate propositions when they express distinct goals or preferences.
+Return ONLY JSON:
+{"decisions":[
+  {"index":0,"relevant":true|false,"proposition_index":0|null,
+   "reason":"<=12 words"}
+]}
 
-Examples of proposition structure:
-- object + relation: "apply to medical school"
-- preference + qualifier: "likes spicy Thai food"
-- situation + qualifier: "little direct patient interaction at work"
-- preference + object: "quiet linear keyboard"
-- decision/update + object: "reconsidering moving to a country"
+The proposition list is authoritative. Candidate memories may NEVER create,
+reinterpret, broaden, narrow, or add a proposition.
 
-Do not invent a proposition that is merely implied, plausible, causal, or
-helpful background.
-
-STEP 3 — ALIGN CANDIDATES TO PROPOSITIONS
-
-A candidate may be relevant=true only when its DEFINING PROPOSITION maps
-directly to one of the explicit personal propositions from Step 2.
+For each proposition, select AT MOST ONE candidate: the memory whose DEFINING
+PROPOSITION is the closest faithful semantic match.
 
 Require QUALIFIER FIDELITY:
-- Preserve the user's distinguishing qualifiers whenever a candidate exists that
-  does so.
-- Qualifiers include the object, subtype, target, domain, time/status, modality,
-  and relation expressed by the user.
-- A broader memory that drops a meaningful qualifier is weaker than a memory
-  that preserves it.
-- A narrower memory that adds an unexpressed qualifier is also weaker.
-- Do not substitute a nearby goal, value, consequence, explanation, or context
-  for the proposition actually expressed.
+- Preserve meaningful object, subtype, target, domain, time/status, modality,
+  and relation qualifiers in the frozen proposition.
+- A broader memory that drops a qualifier is weaker.
+- A narrower memory that adds an unexpressed qualifier is weaker.
+- A nearby goal, value, consequence, explanation, cause, preference, or context
+  is not a match merely because it would make sense.
+- Prefer semantic equivalence over word overlap.
 
-Prefer semantic equivalence or the closest faithful paraphrase, not the memory
-with the most overlapping words.
+Reject candidates that are merely compatible, adjacent, redundant, background,
+a subset/superset, a plausible cause/consequence, or an inferred companion.
 
-STEP 4 — SELECT THE MINIMAL MAXIMALLY FAITHFUL SET
+If no candidate faithfully matches a proposition, select none for it.
+A candidate is relevant=true only when proposition_index names the proposition
+it uniquely and best matches. Every other candidate must be false.
 
-For each explicit personal proposition, select at most the best candidate unless
-multiple memories contribute genuinely non-overlapping information required by
-that same proposition.
-
-Reject candidates that are:
-- merely compatible with the message;
-- broader background facts about the same domain;
-- narrower details not stated by the user;
-- causes, consequences, motivations, or likely context;
-- duplicates, subsets, supersets, restatements, or redundant companions;
-- adjacent goals, interests, preferences, constraints, or biography.
-
-A selected memory should survive this counterfactual:
-"If this candidate were removed while the better-aligned candidate remained,
-would any explicit proposition in the CURRENT message lose its best personal
-continuity match?" If no, reject it as redundant.
-
-For multi-topic messages, preserve each genuinely independent proposition.
-Minimal does not mean one memory; it means one best match per expressed thread,
-with no inferred or redundant extras.
-
-MEMORY-BLIND SAFETY TEST
-
-1. Hide all candidate memories.
-2. Identify the personal propositions solely from the CURRENT message.
-3. Reveal candidates.
-4. Match candidates to those pre-existing propositions.
-5. Reject any candidate that creates a new proposition rather than matching one.
-
-Keep each reason extremely short (12 words maximum). Useful rejection reasons:
-"general question, not personal continuity", "ambiguous without message anchor",
-"broader than expressed proposition", "adds unexpressed qualifier",
-"adjacent personal thread", "redundant with closer match",
-"proposition not expressed".
-
-Judge relevance only. Do not decide whether a memory is true or current; another
-subsystem handles evidence integrity. If uncertain, prefer false.
+Candidate retrieval order and score are not evidence of semantic relevance.
+If uncertain, prefer false.
 """
+
+# Backward-compatible inspection surface for tests/status tooling. Production
+# inference uses the two prompts in separate requests.
+RELEVANCE_SYSTEM = MESSAGE_ANALYSIS_SYSTEM + "\n\n" + CANDIDATE_SELECTION_SYSTEM
+
 
 class OllamaMemoryRelevanceGate:
     def __init__(
@@ -136,6 +102,7 @@ class OllamaMemoryRelevanceGate:
         self.last_decisions: list[dict] = []
         self.last_message_scope: str | None = None
         self.last_scope_reason: str | None = None
+        self.last_propositions: list[dict] = []
         self.last_metrics: dict = {}
 
     def reset(self) -> None:
@@ -143,31 +110,87 @@ class OllamaMemoryRelevanceGate:
         self.last_decisions = []
         self.last_message_scope = None
         self.last_scope_reason = None
+        self.last_propositions = []
         self.last_metrics = {}
 
     @staticmethod
-    def _parse(raw: str, expected: int) -> dict | None:
+    def _strip_fence(raw: str) -> str:
         raw = raw.strip()
         fence = chr(96) * 3
         if raw.startswith(fence) and raw.endswith(fence):
             lines = raw.splitlines()
             if len(lines) >= 3 and lines[0].lower() in {fence, fence + "json"}:
-                raw = "\n".join(lines[1:-1]).strip()
+                return "\n".join(lines[1:-1]).strip()
+        return raw
+
+    @classmethod
+    def _parse_analysis(cls, raw: str) -> dict | None:
         try:
-            payload = json.loads(raw)
+            payload = json.loads(cls._strip_fence(raw))
         except (TypeError, ValueError):
             return None
         if not isinstance(payload, dict):
             return None
 
-        message_scope = payload.get("message_scope")
-        scope_reason = payload.get("scope_reason")
+        scope = payload.get("message_scope")
+        reason = payload.get("scope_reason")
         valid_scopes = {
             "personal_anchored",
             "general_informational",
             "ambiguous_unanchored",
         }
-        if message_scope not in valid_scopes or not isinstance(scope_reason, str):
+        if scope not in valid_scopes or not isinstance(reason, str):
+            return None
+
+        propositions = payload.get("propositions")
+        if not isinstance(propositions, list) or len(propositions) > 4:
+            return None
+
+        parsed: list[dict] = []
+        seen: set[int] = set()
+        for proposition in propositions:
+            if not isinstance(proposition, dict):
+                return None
+            index = proposition.get("index")
+            text = proposition.get("text")
+            if (
+                not isinstance(index, int)
+                or index < 0
+                or index in seen
+                or not isinstance(text, str)
+                or not text.strip()
+            ):
+                return None
+            seen.add(index)
+            parsed.append({"index": index, "text": text.strip()[:320]})
+
+        parsed.sort(key=lambda row: row["index"])
+        if [row["index"] for row in parsed] != list(range(len(parsed))):
+            return None
+        if scope == "personal_anchored" and not parsed:
+            return None
+        if scope != "personal_anchored" and parsed:
+            return None
+
+        return {
+            "message_scope": scope,
+            "scope_reason": reason.strip()[:240],
+            "propositions": parsed,
+        }
+
+    @classmethod
+    def _parse_selection(
+        cls,
+        raw: str,
+        *,
+        expected: int,
+        proposition_count: int,
+    ) -> list[dict] | None:
+        try:
+            payload = json.loads(cls._strip_fence(raw))
+        except (TypeError, ValueError):
+            return None
+        if not isinstance(payload, dict):
             return None
 
         decisions = payload.get("decisions")
@@ -175,95 +198,94 @@ class OllamaMemoryRelevanceGate:
             return None
 
         parsed: list[dict] = []
-        seen: set[int] = set()
+        seen_candidates: set[int] = set()
+        selected_propositions: set[int] = set()
+
         for decision in decisions:
             if not isinstance(decision, dict):
                 return None
             index = decision.get("index")
             relevant = decision.get("relevant")
+            proposition_index = decision.get("proposition_index")
             reason = decision.get("reason")
+
             if (
                 not isinstance(index, int)
                 or index < 0
                 or index >= expected
-                or index in seen
+                or index in seen_candidates
                 or type(relevant) is not bool
                 or not isinstance(reason, str)
             ):
                 return None
-            seen.add(index)
-            parsed.append({
-                "index": index,
-                "relevant": relevant,
-                "reason": reason.strip()[:240],
-            })
+
+            if relevant:
+                if (
+                    not isinstance(proposition_index, int)
+                    or proposition_index < 0
+                    or proposition_index >= proposition_count
+                    or proposition_index in selected_propositions
+                ):
+                    return None
+                selected_propositions.add(proposition_index)
+            elif proposition_index is not None and (
+                not isinstance(proposition_index, int)
+                or proposition_index < 0
+                or proposition_index >= proposition_count
+            ):
+                return None
+
+            seen_candidates.add(index)
+            parsed.append(
+                {
+                    "index": index,
+                    "relevant": relevant,
+                    "proposition_index": proposition_index if relevant else None,
+                    "reason": reason.strip()[:240],
+                }
+            )
 
         parsed.sort(key=lambda row: row["index"])
         if [row["index"] for row in parsed] != list(range(expected)):
             return None
+        return parsed
 
-        # Enforce the model's global scope classification. Candidate-level
-        # topical attraction cannot override a general or ambiguous message.
-        if message_scope != "personal_anchored":
-            parsed = [
-                {
-                    "index": row["index"],
-                    "relevant": False,
-                    "reason": (
-                        "general question, not personal continuity"
-                        if message_scope == "general_informational"
-                        else "ambiguous without current-message anchor"
-                    ),
-                }
-                for row in parsed
-            ]
-
+    @staticmethod
+    def _metrics(data: dict, attempts: int) -> dict:
         return {
-            "message_scope": message_scope,
-            "scope_reason": scope_reason.strip()[:240],
-            "decisions": parsed,
+            "total_ms": round(float(data.get("total_duration", 0)) / 1_000_000, 3),
+            "load_ms": round(float(data.get("load_duration", 0)) / 1_000_000, 3),
+            "prompt_eval_ms": round(
+                float(data.get("prompt_eval_duration", 0)) / 1_000_000, 3
+            ),
+            "eval_ms": round(float(data.get("eval_duration", 0)) / 1_000_000, 3),
+            "prompt_tokens": int(data.get("prompt_eval_count", 0) or 0),
+            "output_tokens": int(data.get("eval_count", 0) or 0),
+            "attempts": attempts,
         }
 
-    async def judge(self, user_text: str, candidates: list[dict]) -> list[dict]:
-        if not candidates:
-            self.last_decisions = []
-            self.last_message_scope = None
-            self.last_scope_reason = None
-            self.last_error = None
-            return []
-
-        candidate_payload = [
-            {
-                "index": index,
-                "topic_key": candidate["belief"].get("topic_key"),
-                "memory": candidate["belief"].get("text"),
-                "open_question": candidate["belief"].get("open_question"),
-            }
-            for index, candidate in enumerate(candidates)
-        ]
+    async def _run_phase(
+        self,
+        *,
+        system_prompt: str,
+        user_payload: dict,
+        num_predict: int,
+        parser: Callable[[str], dict | list[dict] | None],
+    ) -> tuple[dict | list[dict], dict]:
         payload = {
             "model": self.model,
             "stream": False,
             "think": False,
-            # The local MLX Ollama-compatible /api/chat endpoint used by AISHA
-            # does not implement Ollama's structured-output "format" option.
-            # The system prompt still requires raw JSON and _parse validates it.
             "options": {
                 "temperature": 0,
-                "num_predict": 320,
+                "num_predict": num_predict,
                 "num_ctx": 4096,
             },
             "messages": [
-                {"role": "system", "content": RELEVANCE_SYSTEM},
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
-                    "content": json.dumps(
-                        {
-                            "current_user_message": user_text,
-                            "candidates": candidate_payload,
-                        },
-                        ensure_ascii=False,
-                    ),
+                    "content": json.dumps(user_payload, ensure_ascii=False),
                 },
             ],
         }
@@ -280,56 +302,147 @@ class OllamaMemoryRelevanceGate:
                     response.raise_for_status()
                     data = response.json()
 
-                metrics = {
-                    "total_ms": round(float(data.get("total_duration", 0)) / 1_000_000, 3),
-                    "load_ms": round(float(data.get("load_duration", 0)) / 1_000_000, 3),
-                    "prompt_eval_ms": round(
-                        float(data.get("prompt_eval_duration", 0)) / 1_000_000, 3
-                    ),
-                    "eval_ms": round(float(data.get("eval_duration", 0)) / 1_000_000, 3),
-                    "prompt_tokens": int(data.get("prompt_eval_count", 0) or 0),
-                    "output_tokens": int(data.get("eval_count", 0) or 0),
-                    "attempts": attempt + 1,
-                }
-
                 raw = data.get("message", {}).get("content")
                 if not isinstance(raw, str):
                     final_error = TypeError("relevance_gate_missing_response")
-                    if attempt == 0:
-                        continue
-                    break
+                    continue
 
-                parsed = self._parse(raw, len(candidates))
+                parsed = parser(raw)
                 if parsed is None:
                     final_error = ValueError("relevance_gate_invalid_response")
-                    if attempt == 0:
-                        continue
-                    break
+                    continue
 
-                decisions = parsed["decisions"]
-                self.last_message_scope = str(parsed["message_scope"])
-                self.last_scope_reason = str(parsed["scope_reason"])
-                self.last_decisions = decisions
-                self.last_metrics = metrics
-                self.last_error = None
-                return decisions
+                return parsed, self._metrics(data, attempt + 1)
             except Exception as exc:  # noqa: BLE001 - recall must never break chat
                 final_error = exc
                 break
 
+        if final_error is None:
+            final_error = RuntimeError("relevance_gate_unknown_failure")
+        raise final_error
+
+    @staticmethod
+    def _combine_metrics(analysis: dict, selection: dict | None) -> dict:
+        selection = selection or {}
+        additive = (
+            "total_ms",
+            "load_ms",
+            "prompt_eval_ms",
+            "eval_ms",
+            "prompt_tokens",
+            "output_tokens",
+        )
+        combined = {
+            key: round(
+                float(analysis.get(key, 0) or 0)
+                + float(selection.get(key, 0) or 0),
+                3,
+            )
+            for key in additive
+        }
+        combined.update(
+            {
+                "analysis_ms": float(analysis.get("total_ms", 0) or 0),
+                "selection_ms": float(selection.get("total_ms", 0) or 0),
+                "analysis_attempts": int(analysis.get("attempts", 0) or 0),
+                "selection_attempts": int(selection.get("attempts", 0) or 0),
+            }
+        )
+        combined["prompt_tokens"] = int(combined["prompt_tokens"])
+        combined["output_tokens"] = int(combined["output_tokens"])
+        return combined
+
+    def _fail_closed(self, candidates: list[dict], exc: Exception) -> list[dict]:
         self.last_decisions = [
             {
                 "index": index,
                 "relevant": False,
+                "proposition_index": None,
                 "reason": "relevance_gate_unavailable",
             }
             for index in range(len(candidates))
         ]
         self.last_message_scope = None
         self.last_scope_reason = None
+        self.last_propositions = []
         self.last_metrics = {}
-        error = final_error or RuntimeError("relevance_gate_unknown_failure")
-        self.last_error = f"{type(error).__name__}: {error}"
+        self.last_error = f"{type(exc).__name__}: {exc}"
+        return self.last_decisions
+
+    async def judge(self, user_text: str, candidates: list[dict]) -> list[dict]:
+        if not candidates:
+            self.reset()
+            return []
+
+        # Phase 1 is physically memory-blind: no candidate content is included.
+        try:
+            analysis, analysis_metrics = await self._run_phase(
+                system_prompt=MESSAGE_ANALYSIS_SYSTEM,
+                user_payload={"current_user_message": user_text},
+                num_predict=180,
+                parser=self._parse_analysis,
+            )
+        except Exception as exc:  # noqa: BLE001 - recall must never break chat
+            return self._fail_closed(candidates, exc)
+
+        assert isinstance(analysis, dict)
+        self.last_message_scope = str(analysis["message_scope"])
+        self.last_scope_reason = str(analysis["scope_reason"])
+        self.last_propositions = list(analysis["propositions"])
+
+        if self.last_message_scope != "personal_anchored":
+            reason = (
+                "general question, not personal continuity"
+                if self.last_message_scope == "general_informational"
+                else "ambiguous without message anchor"
+            )
+            self.last_decisions = [
+                {
+                    "index": index,
+                    "relevant": False,
+                    "proposition_index": None,
+                    "reason": reason,
+                }
+                for index in range(len(candidates))
+            ]
+            self.last_metrics = self._combine_metrics(analysis_metrics, None)
+            self.last_error = None
+            return self.last_decisions
+
+        candidate_payload = [
+            {
+                "index": index,
+                "topic_key": candidate["belief"].get("topic_key"),
+                "memory": candidate["belief"].get("text"),
+                "open_question": candidate["belief"].get("open_question"),
+            }
+            for index, candidate in enumerate(candidates)
+        ]
+
+        try:
+            selection, selection_metrics = await self._run_phase(
+                system_prompt=CANDIDATE_SELECTION_SYSTEM,
+                user_payload={
+                    "propositions": self.last_propositions,
+                    "candidates": candidate_payload,
+                },
+                num_predict=320,
+                parser=lambda raw: self._parse_selection(
+                    raw,
+                    expected=len(candidates),
+                    proposition_count=len(self.last_propositions),
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - recall must never break chat
+            return self._fail_closed(candidates, exc)
+
+        assert isinstance(selection, list)
+        self.last_decisions = selection
+        self.last_metrics = self._combine_metrics(
+            analysis_metrics,
+            selection_metrics,
+        )
+        self.last_error = None
         return self.last_decisions
 
     def status(self) -> dict:
@@ -339,6 +452,7 @@ class OllamaMemoryRelevanceGate:
             "prompt_version": RELEVANCE_GATE_PROMPT_VERSION,
             "message_scope": self.last_message_scope,
             "scope_reason": self.last_scope_reason,
+            "propositions": self.last_propositions,
             "last_error": self.last_error,
             "last_decisions": self.last_decisions,
             "last_metrics": self.last_metrics,
