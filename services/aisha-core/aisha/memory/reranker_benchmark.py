@@ -435,6 +435,7 @@ async def run_reranker_case(
     actual = set(actual_topics)
     status = gate.status()
     metrics = status.get("last_metrics", {}) if isinstance(status, dict) else {}
+    gate_error = status.get("last_error") if isinstance(status, dict) else None
 
     return {
         "case_id": case.case_id,
@@ -449,6 +450,10 @@ async def run_reranker_case(
         "false_negative": len(expected - actual),
         "candidate_decisions": candidate_decisions,
         "relevance_gate": status,
+        "valid_judgment": not bool(gate_error),
+        "gate_error": gate_error,
+        "message_scope": status.get("message_scope") if isinstance(status, dict) else None,
+        "scope_reason": status.get("scope_reason") if isinstance(status, dict) else None,
         "latency_ms": {
             "total": round(wall_ms, 3),
             "gate": round(float(metrics.get("total_ms", 0) or 0), 3),
@@ -469,6 +474,17 @@ def summarize_reranker_results(results: list[dict]) -> dict:
     fn = sum(int(row["false_negative"]) for row in results)
     exact = sum(1 for row in results if row["exact"])
     expected_memories = sum(len(row["expected_topics"]) for row in results)
+
+    valid_results = [row for row in results if row.get("valid_judgment", True)]
+    protocol_failures = [row for row in results if not row.get("valid_judgment", True)]
+    judged_tp = sum(int(row["true_positive"]) for row in valid_results)
+    judged_fp = sum(int(row["false_positive"]) for row in valid_results)
+    judged_fn = sum(int(row["false_negative"]) for row in valid_results)
+    judged_exact = sum(1 for row in valid_results if row["exact"])
+    judged_negatives = [row for row in valid_results if not row["expected_topics"]]
+    judged_negative_passes = sum(
+        1 for row in judged_negatives if not row["actual_topics"]
+    )
 
     negatives = [row for row in results if not row["expected_topics"]]
     negative_passes = sum(1 for row in negatives if not row["actual_topics"])
@@ -492,6 +508,8 @@ def summarize_reranker_results(results: list[dict]) -> dict:
         category_fp = sum(int(row["false_positive"]) for row in rows)
         category_fn = sum(int(row["false_negative"]) for row in rows)
         category_exact = sum(1 for row in rows if row["exact"])
+        valid_rows = [row for row in rows if row.get("valid_judgment", True)]
+        valid_exact = sum(1 for row in valid_rows if row["exact"])
         category_summary[category] = {
             "cases": len(rows),
             "exact_cases": category_exact,
@@ -500,6 +518,10 @@ def summarize_reranker_results(results: list[dict]) -> dict:
             "recall": _pct(category_tp, category_tp + category_fn),
             "false_positive": category_fp,
             "false_negative": category_fn,
+            "protocol_failures": len(rows) - len(valid_rows),
+            "judged_cases": len(valid_rows),
+            "judged_exact_cases": valid_exact,
+            "judged_exact_accuracy": _pct(valid_exact, len(valid_rows)),
         }
 
     return {
@@ -514,6 +536,15 @@ def summarize_reranker_results(results: list[dict]) -> dict:
         "negative_controls": len(negatives),
         "negative_controls_passed": negative_passes,
         "negative_control_accuracy": _pct(negative_passes, len(negatives)),
+        "protocol_failures": len(protocol_failures),
+        "judged_cases": len(valid_results),
+        "judged_exact_cases": judged_exact,
+        "judged_exact_accuracy": _pct(judged_exact, len(valid_results)),
+        "judged_precision": _pct(judged_tp, judged_tp + judged_fp),
+        "judged_recall": _pct(judged_tp, judged_tp + judged_fn),
+        "judged_negative_control_accuracy": _pct(
+            judged_negative_passes, len(judged_negatives)
+        ),
         "expected_memories": expected_memories,
         "over_retrieval_rate": _pct(fp, expected_memories),
         "clean_queries": clean_queries,
