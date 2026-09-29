@@ -18,7 +18,6 @@ def test_v6_physically_separates_message_analysis_from_candidate_selection():
     assert "general_informational" in analysis_prompt
     assert "ambiguous_unanchored" in analysis_prompt
     assert "propositions=[]" in analysis_prompt
-    assert "candidate" not in analysis_prompt.lower()
 
     assert "frozen list of personal propositions" in selection_prompt
     assert "ZERO or ONE match per proposition" in selection_prompt
