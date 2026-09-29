@@ -10,6 +10,7 @@ from aisha.memory.relevance import OllamaMemoryRelevanceGate
 from aisha.memory.reranker_benchmark import (
     SMOKE_RERANKER_CASE_IDS,
     reranker_benchmark_cases,
+    reranker_holdout_cases,
     run_reranker_case,
     summarize_reranker_results,
 )
@@ -36,11 +37,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--suite",
-        choices=("smoke", "full", "reranker-smoke", "reranker-hard"),
+        choices=("smoke", "full", "reranker-smoke", "reranker-hard", "reranker-holdout"),
         default="reranker-smoke",
         help=(
             "Retrieval-pipeline smoke/full suites, or fixed-candidate reranker suites. "
-            "Use reranker-hard for the 40-case model-selection benchmark."
+            "Use reranker-holdout for the unseen model-selection suite."
         ),
     )
     parser.add_argument(
@@ -213,12 +214,15 @@ async def main() -> None:
     reranker_mode = args.suite.startswith("reranker-")
 
     if reranker_mode:
-        all_cases = reranker_benchmark_cases()
-        cases = (
-            [case for case in all_cases if case.case_id in SMOKE_RERANKER_CASE_IDS]
-            if args.suite == "reranker-smoke"
-            else all_cases
-        )
+        if args.suite == "reranker-holdout":
+            cases = reranker_holdout_cases()
+        else:
+            all_cases = reranker_benchmark_cases()
+            cases = (
+                [case for case in all_cases if case.case_id in SMOKE_RERANKER_CASE_IDS]
+                if args.suite == "reranker-smoke"
+                else all_cases
+            )
     else:
         if not profile.memory.embedding_model:
             raise SystemExit(f"Profile {args.profile!r} does not define an embedding model.")
