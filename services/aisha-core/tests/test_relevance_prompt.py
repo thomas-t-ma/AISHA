@@ -8,23 +8,23 @@ from aisha.memory.relevance import (
 )
 
 
-def test_v6_physically_separates_message_analysis_from_candidate_selection():
+def test_v7_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v6.3-contextual-continuity"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v7-structured-axis"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
     assert "ambiguous_unanchored" in analysis_prompt
     assert "propositions=[]" in analysis_prompt
 
-    assert "frozen list of personal propositions" in selection_prompt
-    assert "ZERO or ONE match per proposition" in selection_prompt
-    assert "QUALIFIER FIDELITY" in selection_prompt
-    assert "Candidate retrieval order and score are not evidence" in selection_prompt
+    assert "frozen personal propositions" in selection_prompt
+    assert "Do NOT choose a winner" in selection_prompt
+    assert "axis_match" in selection_prompt
+    assert "qualifier_fidelity" in selection_prompt
+    assert "Candidate retrieval order and score are not semantic evidence" in selection_prompt
     assert "MEMORY-ADDRESSABLE" in analysis_prompt
-    assert "SAME candidate MAY appear for multiple propositions" in selection_prompt
 
 
 def test_analysis_parser_requires_no_propositions_for_nonpersonal_scope():
@@ -77,16 +77,28 @@ def test_analysis_parser_requires_personal_proposition():
     assert OllamaMemoryRelevanceGate._parse_analysis(invalid) is None
 
 
-def test_selection_parser_expands_sparse_matches_and_verifies_topic_index():
+def test_selection_parser_applies_structured_axis_hard_rules():
     raw = json.dumps(
         {
-            "matches": [
+            "evaluations": [
+                {
+                    "proposition_index": 0,
+                    "candidate_index": 0,
+                    "candidate_topic_key": "patient_education_interest",
+                    "relation": "same_fact",
+                    "axis_match": "different",
+                    "qualifier_fidelity": "preserved",
+                    "reason": "different patient activity",
+                },
                 {
                     "proposition_index": 0,
                     "candidate_index": 1,
                     "candidate_topic_key": "job_patient_interaction_level",
-                    "reason": "closest match",
-                }
+                    "relation": "same_axis_state",
+                    "axis_match": "exact",
+                    "qualifier_fidelity": "preserved",
+                    "reason": "same direct-patient-contact axis",
+                },
             ]
         }
     )
@@ -95,21 +107,27 @@ def test_selection_parser_expands_sparse_matches_and_verifies_topic_index():
         raw,
         expected=2,
         proposition_count=1,
-        candidate_topics=["remote_work_preference", "job_patient_interaction_level"],
+        candidate_topics=["patient_education_interest", "job_patient_interaction_level"],
     )
 
     assert parsed is not None
     assert parsed[0]["relevant"] is False
     assert parsed[1]["relevant"] is True
     assert parsed[1]["proposition_index"] == 0
+    assert "same_axis_state" in parsed[1]["reason"]
 
+
+def test_selection_parser_verifies_topic_index_and_uses_order_only_after_hard_checks():
     wrong_topic_echo = json.dumps(
         {
-            "matches": [
+            "evaluations": [
                 {
                     "proposition_index": 0,
                     "candidate_index": 1,
                     "candidate_topic_key": "remote_work_preference",
+                    "relation": "same_fact",
+                    "axis_match": "exact",
+                    "qualifier_fidelity": "preserved",
                     "reason": "wrong echoed topic",
                 }
             ]
@@ -125,23 +143,62 @@ def test_selection_parser_expands_sparse_matches_and_verifies_topic_index():
         is None
     )
 
+    tie = json.dumps(
+        {
+            "evaluations": [
+                {
+                    "proposition_index": 0,
+                    "candidate_index": 1,
+                    "candidate_topic_key": "second",
+                    "relation": "same_fact",
+                    "axis_match": "exact",
+                    "qualifier_fidelity": "preserved",
+                    "reason": "eligible second",
+                },
+                {
+                    "proposition_index": 0,
+                    "candidate_index": 0,
+                    "candidate_topic_key": "first",
+                    "relation": "same_axis_state",
+                    "axis_match": "exact",
+                    "qualifier_fidelity": "preserved",
+                    "reason": "eligible first",
+                },
+            ]
+        }
+    )
+    parsed = OllamaMemoryRelevanceGate._parse_selection(
+        tie,
+        expected=2,
+        proposition_count=1,
+        candidate_topics=["first", "second"],
+    )
+    assert parsed is not None
+    assert parsed[0]["relevant"] is True
+    assert parsed[1]["relevant"] is False
 
 
 def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
     raw = json.dumps(
         {
-            "matches": [
+            "evaluations": [
                 {
                     "proposition_index": 0,
                     "candidate_index": 1,
                     "candidate_topic_key": "keyboard_preference",
-                    "reason": "matches smooth linear switches",
+                    "relation": "same_fact",
+                    "axis_match": "exact",
+                    "qualifier_fidelity": "preserved",
+                    "reason": "smooth linear switches",
                 },
                 {
                     "proposition_index": 1,
                     "candidate_index": 1,
                     "candidate_topic_key": "keyboard_preference",
-                    "reason": "matches quiet keyboard preference",
+                    "relation": "same_fact",
+                    "axis_match": "exact",
+                    "qualifier_fidelity": "preserved",
+                    "reason": "quiet keyboard preference",
                 },
             ]
         }
@@ -160,7 +217,7 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
     assert parsed[1]["proposition_indices"] == [0, 1]
 
 
-def test_relevance_status_reports_v6_fields():
+def test_relevance_status_reports_v7_fields():
     gate = OllamaMemoryRelevanceGate(
         model="test-model",
         base_url="http://127.0.0.1:11434",
@@ -169,7 +226,7 @@ def test_relevance_status_reports_v6_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v6.3-contextual-continuity"
+    assert status["prompt_version"] == "personal-continuity-v7-structured-axis"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []
