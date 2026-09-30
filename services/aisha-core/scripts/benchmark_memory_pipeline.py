@@ -196,6 +196,22 @@ def print_result(result: dict) -> None:
                 f"      proposition {proposition.get('index')}: "
                 f"{proposition.get('text')}"
             )
+            if proposition.get("thread_core"):
+                print(
+                    "        thread: "
+                    f"{proposition.get('thread_core')} · "
+                    f"mode={proposition.get('continuity_mode')}"
+                )
+            if proposition.get("required_anchors"):
+                print(
+                    "        anchors: "
+                    + ", ".join(str(item) for item in proposition["required_anchors"])
+                )
+            if proposition.get("turn_modifiers"):
+                print(
+                    "        modifiers: "
+                    + ", ".join(str(item) for item in proposition["turn_modifiers"])
+                )
         if row.get("gate_error"):
             print(f"      GATE ERROR: {row['gate_error']}")
             if gate_status.get("protocol_phase"):
