@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6.2-two-stage-sparse"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6.3-contextual-continuity"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.

@@ -12,7 +12,7 @@ def test_v6_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v6.2-two-stage-sparse"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v6.3-contextual-continuity"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
@@ -169,7 +169,7 @@ def test_relevance_status_reports_v6_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v6.2-two-stage-sparse"
+    assert status["prompt_version"] == "personal-continuity-v6.3-contextual-continuity"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []

@@ -9,7 +9,7 @@ import httpx
 from aisha.memory.relevance import OllamaMemoryRelevanceGate
 
 logger = logging.getLogger(__name__)
-SEMANTIC_PIPELINE_VERSION = "hybrid-final-gate-v6.2-two-stage-sparse"
+SEMANTIC_PIPELINE_VERSION = "hybrid-final-gate-v6.3-contextual-continuity"
 
 
 class OllamaSemanticMemoryRetriever:
