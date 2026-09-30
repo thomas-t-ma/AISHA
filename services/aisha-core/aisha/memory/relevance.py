@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v9.1-thread-split"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v10-mode-aware"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -18,6 +18,7 @@ Return ONLY JSON:
    {"index":0,
     "text":"faithful explicit personal proposition",
     "thread_core":"enduring personal thread expressed by this proposition",
+    "continuity_mode":"direct|gap|constraint|update",
     "required_anchors":["identity-defining concept"],
     "turn_modifiers":["current-turn detail not required in an older memory"]}
  ]}
@@ -38,7 +39,15 @@ personal_anchored:
   missing or generic.
 
 For personal_anchored, extract ONE proposition per independently storable
-personal fact. For each proposition:
+personal fact. For each proposition assign continuity_mode:
+- direct: a stable preference, goal, project, interest, state, or a current
+  instance of one without an expressed gap, obstacle, or revision.
+- gap: the user misses, lacks, wants more/less of, or expresses a deficit on the
+  thread. An older state on that exact thread may explain the current gap.
+- constraint: the proposition explicitly states an obstacle or circumstance
+  preventing/delaying the thread.
+- update: the proposition questions, strengthens, weakens, reverses, or revises
+  a prior preference/decision/state.
 
 text:
 - Preserve the meaning of the user's explicit statement faithfully.
@@ -146,9 +155,7 @@ RELATION:
 - same_thread: direct restatement or stable preference/goal/project corresponding
   to the current proposition.
 - background_state: stored state directly explains the current expressed gap or
-  desire on the exact same thread and SAME underlying property. Do NOT use
-  background_state merely because a separate circumstance could plausibly
-  motivate the user's goal.
+  desire on the exact same thread.
 - direct_constraint: stored constraint directly corresponds to the obstacle in
   the proposition.
 - prior_state_update: current proposition revises/questions a prior state on the
@@ -156,12 +163,8 @@ RELATION:
 - adjacent: topically related but not direct continuity.
 
 Important distinctions:
-- Progress toward an enduring goal is still the SAME THREAD as a stored plan to
-  pursue that goal. Words such as "keep moving toward" or "eventually" usually
-  describe the current episode rather than a different long-term thread.
-- Intending/applying to medical school is NOT the same thread as uncertainty
-  about the exact application date. Timeline uncertainty must not become
-  background_state merely because uncertainty could motivate making progress.
+- Intending to apply to medical school is not the same thread as uncertainty
+  about the exact application date.
 - Direct patient interaction is not generic clinical experience or patient
   education.
 - A volunteering schedule constraint is not merely a desire for consistency.
@@ -251,6 +254,7 @@ class OllamaMemoryRelevanceGate:
             index = proposition.get("index")
             text = proposition.get("text")
             thread_core = proposition.get("thread_core")
+            continuity_mode = proposition.get("continuity_mode")
             required_anchors = proposition.get("required_anchors")
             turn_modifiers = proposition.get("turn_modifiers")
             if (
@@ -261,6 +265,7 @@ class OllamaMemoryRelevanceGate:
                 or not text.strip()
                 or not isinstance(thread_core, str)
                 or not thread_core.strip()
+                or continuity_mode not in {"direct", "gap", "constraint", "update"}
                 or not isinstance(required_anchors, list)
                 or not required_anchors
                 or len(required_anchors) > 8
@@ -283,6 +288,7 @@ class OllamaMemoryRelevanceGate:
                     "index": index,
                     "text": text.strip()[:320],
                     "thread_core": thread_core.strip()[:320],
+                    "continuity_mode": continuity_mode,
                     "required_anchors": [
                         item.strip()[:120] for item in required_anchors
                     ],
@@ -313,6 +319,7 @@ class OllamaMemoryRelevanceGate:
         *,
         expected: int,
         proposition_count: int,
+        proposition_modes: list[str],
         candidate_topics: list[str],
     ) -> list[dict] | None:
         try:
@@ -326,6 +333,13 @@ class OllamaMemoryRelevanceGate:
         if not isinstance(evaluations, list):
             return None
         if len(candidate_topics) != expected:
+            return None
+        if len(proposition_modes) != proposition_count:
+            return None
+        if any(
+            mode not in {"direct", "gap", "constraint", "update"}
+            for mode in proposition_modes
+        ):
             return None
         if len(evaluations) > proposition_count * min(expected, 6):
             return None
@@ -399,31 +413,68 @@ class OllamaMemoryRelevanceGate:
             "direct_constraint",
             "prior_state_update",
         }
-        relation_priority = {
-            "same_thread": 4,
-            "prior_state_update": 3,
-            "direct_constraint": 3,
-            "background_state": 2,
+        mode_relation_priority = {
+            "direct": {
+                "same_thread": 5,
+                "prior_state_update": 3,
+                "direct_constraint": 2,
+                "background_state": 1,
+            },
+            "gap": {
+                "background_state": 5,
+                "direct_constraint": 4,
+                "same_thread": 3,
+                "prior_state_update": 1,
+            },
+            "constraint": {
+                "direct_constraint": 5,
+                "same_thread": 4,
+                "background_state": 3,
+                "prior_state_update": 1,
+            },
+            "update": {
+                "prior_state_update": 5,
+                "same_thread": 4,
+                "background_state": 2,
+                "direct_constraint": 1,
+            },
         }
         predicate_priority = {"exact": 2, "compatible": 1}
+        thread_priority = {"exact": 2, "broader": 1}
 
         winners: dict[int, dict] = {}
         for proposition_index in range(proposition_count):
-            eligible = [
-                row
-                for row in parsed_evaluations
-                if row["proposition_index"] == proposition_index
-                and row["relation"] in allowed_relations
-                and row["thread_match"] == "exact"
-                and row["anchor_coverage"] == "full"
-                and row["predicate_compatibility"] in {"exact", "compatible"}
-            ]
+            mode = proposition_modes[proposition_index]
+            eligible: list[dict] = []
+            for row in parsed_evaluations:
+                if row["proposition_index"] != proposition_index:
+                    continue
+                if row["relation"] not in allowed_relations:
+                    continue
+                if row["anchor_coverage"] != "full":
+                    continue
+                if row["predicate_compatibility"] not in {"exact", "compatible"}:
+                    continue
+
+                exact_thread = row["thread_match"] == "exact"
+                stable_broader_thread = (
+                    mode == "direct"
+                    and row["relation"] == "same_thread"
+                    and row["thread_match"] == "broader"
+                )
+                if not (exact_thread or stable_broader_thread):
+                    continue
+                eligible.append(row)
+
             if not eligible:
                 continue
+
+            relation_priority = mode_relation_priority[mode]
             winner = max(
                 eligible,
                 key=lambda row: (
                     relation_priority[row["relation"]],
+                    thread_priority[row["thread_match"]],
                     predicate_priority[row["predicate_compatibility"]],
                     -int(row["candidate_index"]),
                 ),
@@ -677,6 +728,10 @@ class OllamaMemoryRelevanceGate:
                     raw,
                     expected=len(candidates),
                     proposition_count=len(self.last_propositions),
+                    proposition_modes=[
+                        str(proposition.get("continuity_mode", ""))
+                        for proposition in self.last_propositions
+                    ],
                     candidate_topics=[
                         str(candidate["belief"].get("topic_key", ""))
                         for candidate in candidates
