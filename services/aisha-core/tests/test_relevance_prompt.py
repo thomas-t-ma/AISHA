@@ -8,11 +8,11 @@ from aisha.memory.relevance import (
 )
 
 
-def test_v9_physically_separates_message_analysis_from_candidate_selection():
+def test_v9_1_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v9-thread-anchors"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v9.1-thread-split"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
@@ -264,7 +264,7 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
     assert parsed[1]["proposition_indices"] == [0, 1]
 
 
-def test_relevance_status_reports_v9_fields():
+def test_relevance_status_reports_v9_1_fields():
     gate = OllamaMemoryRelevanceGate(
         model="test-model",
         base_url="http://127.0.0.1:11434",
@@ -273,7 +273,7 @@ def test_relevance_status_reports_v9_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v9-thread-anchors"
+    assert status["prompt_version"] == "personal-continuity-v9.1-thread-split"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []
