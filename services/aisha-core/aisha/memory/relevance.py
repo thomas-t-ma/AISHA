@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v10.1-capacity-constraint"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v10.2-source-grounded-anchors"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -19,7 +20,8 @@ Return ONLY JSON:
     "text":"faithful explicit personal proposition",
     "thread_core":"enduring personal thread expressed by this proposition",
     "continuity_mode":"direct|gap|constraint|update",
-    "required_anchors":["identity-defining concept"],
+    "required_anchors":["minimal identity-defining concept"],
+    "anchor_evidence":["exact words copied from current message"],
     "turn_modifiers":["current-turn detail not required in an older memory"]}
  ]}
 
@@ -64,14 +66,27 @@ thread_core:
 - Do NOT add facts, causes, motives, or goals that were not stated.
 
 required_anchors:
-- Include every concept needed to distinguish the intended personal thread from
-  nearby but different memories.
-- Anchors may be semantic concepts rather than exact words.
-- Coordinated descriptors that change which preference/thread is identified
-  belong here.
-- Examples: "spicy/hot" AND "Thai food" distinguish a spicy-Thai preference;
+- Use the MINIMUM set of concepts needed to identify the enduring personal
+  thread and distinguish it from nearby different memories.
+- Every required anchor MUST be directly supported by words in the current
+  message. Never infer a role, status, institution, motive, prerequisite, or
+  context that the user did not state.
+- Explicit wording is NOT automatically an anchor. If removing a workflow-stage
+  or episode-specific detail still leaves the same identifiable long-term
+  thread, put that detail in turn_modifiers instead.
+- Example: for "keep moving toward submitting my medical-school application",
+  the enduring anchor is the medical-school application goal; "submitting" and
+  "keep moving toward" describe the current episode/stage.
+- Coordinated descriptors that truly change thread identity remain required.
+  Examples: "spicy/hot" AND "Thai food" distinguish a spicy-Thai preference;
   "direct patient interaction" differs from generic clinical experience or
   patient education; "remote work" differs from general schedule flexibility.
+
+anchor_evidence:
+- Provide exactly one evidence string for each required_anchor, in the same
+  order.
+- Each evidence string MUST copy exact words from the current user message that
+  support that anchor. Do not paraphrase or invent evidence.
 
 turn_modifiers:
 - Put explicit details here only when an older memory need not contain them to
@@ -227,8 +242,17 @@ class OllamaMemoryRelevanceGate:
                 return "\n".join(lines[1:-1]).strip()
         return raw
 
+    @staticmethod
+    def _normalize_source_span(text: str) -> str:
+        return " ".join(re.findall(r"[a-z0-9]+", text.casefold()))
+
     @classmethod
-    def _parse_analysis(cls, raw: str) -> dict | None:
+    def _parse_analysis(
+        cls,
+        raw: str,
+        *,
+        source_message: str | None = None,
+    ) -> dict | None:
         try:
             payload = json.loads(cls._strip_fence(raw))
         except (TypeError, ValueError):
@@ -260,6 +284,7 @@ class OllamaMemoryRelevanceGate:
             thread_core = proposition.get("thread_core")
             continuity_mode = proposition.get("continuity_mode")
             required_anchors = proposition.get("required_anchors")
+            anchor_evidence = proposition.get("anchor_evidence")
             turn_modifiers = proposition.get("turn_modifiers")
             if (
                 not isinstance(index, int)
@@ -277,6 +302,12 @@ class OllamaMemoryRelevanceGate:
                     isinstance(item, str) and item.strip()
                     for item in required_anchors
                 )
+                or not isinstance(anchor_evidence, list)
+                or len(anchor_evidence) != len(required_anchors)
+                or not all(
+                    isinstance(item, str) and item.strip()
+                    for item in anchor_evidence
+                )
                 or not isinstance(turn_modifiers, list)
                 or len(turn_modifiers) > 8
                 or not all(
@@ -285,6 +316,16 @@ class OllamaMemoryRelevanceGate:
                 )
             ):
                 return None
+
+            if source_message is not None:
+                normalized_source = cls._normalize_source_span(source_message)
+                for evidence in anchor_evidence:
+                    normalized_evidence = cls._normalize_source_span(evidence)
+                    if (
+                        not normalized_evidence
+                        or normalized_evidence not in normalized_source
+                    ):
+                        return None
 
             seen.add(index)
             parsed.append(
@@ -295,6 +336,9 @@ class OllamaMemoryRelevanceGate:
                     "continuity_mode": continuity_mode,
                     "required_anchors": [
                         item.strip()[:120] for item in required_anchors
+                    ],
+                    "anchor_evidence": [
+                        item.strip()[:160] for item in anchor_evidence
                     ],
                     "turn_modifiers": [
                         item.strip()[:120] for item in turn_modifiers
@@ -680,7 +724,10 @@ class OllamaMemoryRelevanceGate:
                 system_prompt=MESSAGE_ANALYSIS_SYSTEM,
                 user_payload={"current_user_message": user_text},
                 num_predict=320,
-                parser=self._parse_analysis,
+                parser=lambda raw: self._parse_analysis(
+                    raw,
+                    source_message=user_text,
+                ),
             )
         except Exception as exc:  # noqa: BLE001 - recall must never break chat
             return self._fail_closed(candidates, exc)
