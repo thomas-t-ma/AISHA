@@ -8,11 +8,11 @@ from aisha.memory.relevance import (
 )
 
 
-def test_v9_1_physically_separates_message_analysis_from_candidate_selection():
+def test_v10_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v9.1-thread-split"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v10-mode-aware"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
@@ -22,6 +22,7 @@ def test_v9_1_physically_separates_message_analysis_from_candidate_selection():
     assert "frozen personal propositions" in selection_prompt
     assert "Do NOT choose a winner" in selection_prompt
     assert "thread_core" in analysis_prompt
+    assert "continuity_mode" in analysis_prompt
     assert "required_anchors" in analysis_prompt
     assert "turn_modifiers" in analysis_prompt
     assert "thread_match" in selection_prompt
@@ -66,6 +67,7 @@ def test_analysis_parser_requires_personal_proposition():
                     "index": 0,
                     "text": "wants more patient interaction at work",
                     "thread_core": "direct patient interaction at work",
+                    "continuity_mode": "gap",
                     "required_anchors": ["direct patient interaction", "work"],
                     "turn_modifiers": [],
                 }
@@ -121,6 +123,7 @@ def test_selection_parser_applies_thread_anchor_hard_rules():
         raw,
         expected=2,
         proposition_count=1,
+        proposition_modes=["gap"],
         candidate_topics=["patient_education_interest", "job_patient_interaction_level"],
     )
 
@@ -153,6 +156,7 @@ def test_selection_parser_verifies_topic_index_and_prioritizes_direct_thread_mat
             wrong_topic_echo,
             expected=2,
             proposition_count=1,
+            proposition_modes=["direct"],
             candidate_topics=["remote_work_preference", "job_patient_interaction_level"],
         )
         is None
@@ -188,11 +192,79 @@ def test_selection_parser_verifies_topic_index_and_prioritizes_direct_thread_mat
         tie,
         expected=2,
         proposition_count=1,
+        proposition_modes=["direct"],
         candidate_topics=["first", "second"],
     )
     assert parsed is not None
     assert parsed[0]["relevant"] is False
     assert parsed[1]["relevant"] is True
+
+
+def test_selection_parser_gap_mode_prefers_background_state():
+    raw = json.dumps(
+        {
+            "evaluations": [
+                {
+                    "proposition_index": 0,
+                    "candidate_index": 0,
+                    "candidate_topic_key": "patient_education_interest",
+                    "relation": "same_thread",
+                    "thread_match": "exact",
+                    "anchor_coverage": "full",
+                    "predicate_compatibility": "compatible",
+                    "reason": "eligible but not best for a gap",
+                },
+                {
+                    "proposition_index": 0,
+                    "candidate_index": 1,
+                    "candidate_topic_key": "job_patient_interaction_level",
+                    "relation": "background_state",
+                    "thread_match": "exact",
+                    "anchor_coverage": "full",
+                    "predicate_compatibility": "compatible",
+                    "reason": "stored low interaction explains the gap",
+                },
+            ]
+        }
+    )
+    parsed = OllamaMemoryRelevanceGate._parse_selection(
+        raw,
+        expected=2,
+        proposition_count=1,
+        proposition_modes=["gap"],
+        candidate_topics=["patient_education_interest", "job_patient_interaction_level"],
+    )
+    assert parsed is not None
+    assert parsed[0]["relevant"] is False
+    assert parsed[1]["relevant"] is True
+
+
+def test_selection_parser_direct_mode_allows_broader_stable_thread_with_full_anchors():
+    raw = json.dumps(
+        {
+            "evaluations": [
+                {
+                    "proposition_index": 0,
+                    "candidate_index": 0,
+                    "candidate_topic_key": "professional_school_goal",
+                    "relation": "same_thread",
+                    "thread_match": "broader",
+                    "anchor_coverage": "full",
+                    "predicate_compatibility": "compatible",
+                    "reason": "stable goal underlies current progress",
+                }
+            ]
+        }
+    )
+    parsed = OllamaMemoryRelevanceGate._parse_selection(
+        raw,
+        expected=1,
+        proposition_count=1,
+        proposition_modes=["direct"],
+        candidate_topics=["professional_school_goal"],
+    )
+    assert parsed is not None
+    assert parsed[0]["relevant"] is True
 
 
 def test_selection_parser_rejects_partial_required_anchor_coverage():
@@ -216,6 +288,7 @@ def test_selection_parser_rejects_partial_required_anchor_coverage():
         raw,
         expected=1,
         proposition_count=1,
+        proposition_modes=["gap"],
         candidate_topics=["thai_food_interest"],
     )
     assert parsed is not None
@@ -255,6 +328,7 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
         raw,
         expected=2,
         proposition_count=2,
+        proposition_modes=["direct", "direct"],
         candidate_topics=["computer_build_priority", "keyboard_preference"],
     )
 
@@ -264,7 +338,7 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
     assert parsed[1]["proposition_indices"] == [0, 1]
 
 
-def test_relevance_status_reports_v9_1_fields():
+def test_relevance_status_reports_v10_fields():
     gate = OllamaMemoryRelevanceGate(
         model="test-model",
         base_url="http://127.0.0.1:11434",
@@ -273,7 +347,7 @@ def test_relevance_status_reports_v9_1_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v9.1-thread-split"
+    assert status["prompt_version"] == "personal-continuity-v10-mode-aware"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []
