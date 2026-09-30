@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v6.3-contextual-continuity"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v7-structured-axis"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -72,53 +72,58 @@ Use at most four propositions. If uncertain whether a specific personal thread
 is independently identifiable, prefer ambiguous_unanchored.
 """
 
-CANDIDATE_SELECTION_SYSTEM = """You map candidate memories onto a frozen list of
+CANDIDATE_SELECTION_SYSTEM = """You evaluate candidate memories against frozen
 personal propositions extracted earlier WITHOUT access to any memories.
 
-Return ONLY sparse JSON:
-{"matches":[
+Do NOT choose a winner. Return a sparse shortlist of plausible candidates with
+structured labels so code can apply the final hard rules.
+
+Return ONLY JSON:
+{"evaluations":[
   {"proposition_index":0,"candidate_index":3,
-   "candidate_topic_key":"example_topic","reason":"<=12 words"}
+   "candidate_topic_key":"example_topic",
+   "relation":"same_fact|same_axis_state|direct_constraint|prior_state_update|adjacent",
+   "axis_match":"exact|broader|narrower|different",
+   "qualifier_fidelity":"preserved|dropped|added|conflict",
+   "reason":"<=12 words"}
 ]}
 
-Return ZERO or ONE match per proposition. If no candidate faithfully matches a
-proposition, omit that proposition from matches.
+For each proposition, return every candidate that is plausibly on the same
+subject/domain, up to FOUR candidates. Omit clearly unrelated candidates.
 
-The proposition list is authoritative. Candidate memories may NEVER create,
-reinterpret, broaden, narrow, or add a proposition.
+RELATION:
+- same_fact: same state, preference, goal, decision, interest, or situation.
+- same_axis_state: stored state directly explains the current gap/desire on the
+  same exact attribute.
+- direct_constraint: stored circumstance directly corresponds to an obstacle
+  explicitly present in the proposition.
+- prior_state_update: current proposition revises/questions a prior state on the
+  same explicitly named attribute.
+- adjacent: related topic but not one of the four relations above.
 
-For each proposition, choose AT MOST ONE candidate: the memory whose DEFINING
-PROPOSITION is the closest faithful continuity match on the same subject,
-domain, and attribute. A valid continuity match may be the same fact, a stored
-state directly corresponding to the current gap, an explicit constraint, or a
-prior state being updated on the same named thread.
+AXIS MATCH:
+- exact: same distinguishing attribute/activity/constraint.
+- broader: candidate loses a distinguishing attribute.
+- narrower: candidate adds a new distinguishing attribute.
+- different: candidate concerns another activity, value, or attribute.
 
-Require QUALIFIER FIDELITY:
-- Preserve meaningful object, subtype, target, domain, time/status, modality,
-  and relation qualifiers in the frozen proposition.
-- A broader memory that drops a qualifier is weaker.
-- A narrower memory that adds an unexpressed qualifier is weaker.
-- A nearby goal, value, consequence, explanation, cause, preference, or context
-  is not a match merely because it would make sense.
-- Compare subject, domain, and attribute fidelity before surface wording.
-- Prefer the candidate preserving the most distinguishing qualifiers.
-- Reject a nearby activity, goal, or preference even when it shares more words.
+QUALIFIER FIDELITY:
+- preserved: all important object, target, domain, timing/status, and relation
+  qualifiers are retained.
+- dropped: candidate omits an important qualifier.
+- added: candidate adds an unsupported qualifier.
+- conflict: candidate contradicts a qualifier.
 
-Reject candidates that are merely compatible, adjacent, redundant, background,
-a subset/superset, a plausible cause/consequence, or an inferred companion.
+Examples of distinctions:
+- direct patient interaction is a different axis from patient education.
+- schedule room for volunteering is not the same axis as merely wanting regular
+  volunteering.
+- remote-work preference is a different axis from general schedule flexibility.
+- direct patient experience is narrower than general clinical experience.
 
-IMPORTANT OUTPUT CONTRACT:
-- candidate_index MUST be the exact index shown on the chosen candidate.
-- candidate_topic_key MUST exactly echo that candidate's topic_key.
-- Never renumber candidates.
-- Never output rejected candidates.
-- Never output two matches for the same proposition.
-- The SAME candidate MAY appear for multiple propositions when one memory
-  faithfully covers all of them. This is not an error and does not duplicate
-  the recalled memory.
-- Candidate retrieval order and score are not evidence of semantic relevance.
-
-If uncertain, return no match for that proposition.
+Candidate retrieval order and score are not semantic evidence. Label candidates
+independently and conservatively. If uncertain, use adjacent/broader/different
+rather than upgrading a candidate to an exact match.
 """
 
 # Backward-compatible inspection surface for tests/status tooling. Production
@@ -237,36 +242,91 @@ class OllamaMemoryRelevanceGate:
         if not isinstance(payload, dict):
             return None
 
-        matches = payload.get("matches")
-        if not isinstance(matches, list) or len(matches) > proposition_count:
+        evaluations = payload.get("evaluations")
+        if not isinstance(evaluations, list):
+            return None
+        if len(evaluations) > proposition_count * min(expected, 4):
             return None
 
-        selected_propositions: set[int] = set()
-        selected_by_candidate: dict[int, dict] = {}
+        valid_relations = {
+            "same_fact",
+            "same_axis_state",
+            "direct_constraint",
+            "prior_state_update",
+            "adjacent",
+        }
+        valid_axis = {"exact", "broader", "narrower", "different"}
+        valid_fidelity = {"preserved", "dropped", "added", "conflict"}
 
-        for match in matches:
-            if not isinstance(match, dict):
+        seen_pairs: set[tuple[int, int]] = set()
+        parsed_evaluations: list[dict] = []
+        for row in evaluations:
+            if not isinstance(row, dict):
                 return None
-            proposition_index = match.get("proposition_index")
-            candidate_index = match.get("candidate_index")
-            candidate_topic_key = match.get("candidate_topic_key")
-            reason = match.get("reason")
+            proposition_index = row.get("proposition_index")
+            candidate_index = row.get("candidate_index")
+            topic_key = row.get("candidate_topic_key")
+            relation = row.get("relation")
+            axis_match = row.get("axis_match")
+            qualifier_fidelity = row.get("qualifier_fidelity")
+            reason = row.get("reason")
 
+            pair = (proposition_index, candidate_index)
             if (
                 not isinstance(proposition_index, int)
                 or proposition_index < 0
                 or proposition_index >= proposition_count
-                or proposition_index in selected_propositions
                 or not isinstance(candidate_index, int)
                 or candidate_index < 0
                 or candidate_index >= expected
-                or not isinstance(candidate_topic_key, str)
-                or candidate_topic_key != candidate_topics[candidate_index]
+                or pair in seen_pairs
+                or not isinstance(topic_key, str)
+                or topic_key != candidate_topics[candidate_index]
+                or relation not in valid_relations
+                or axis_match not in valid_axis
+                or qualifier_fidelity not in valid_fidelity
                 or not isinstance(reason, str)
             ):
                 return None
 
-            selected_propositions.add(proposition_index)
+            seen_pairs.add(pair)
+            parsed_evaluations.append(
+                {
+                    "proposition_index": proposition_index,
+                    "candidate_index": candidate_index,
+                    "relation": relation,
+                    "axis_match": axis_match,
+                    "qualifier_fidelity": qualifier_fidelity,
+                    "reason": reason.strip()[:240],
+                }
+            )
+
+        allowed_relations = {
+            "same_fact",
+            "same_axis_state",
+            "direct_constraint",
+            "prior_state_update",
+        }
+        winners: dict[int, dict] = {}
+        for proposition_index in range(proposition_count):
+            eligible = [
+                row
+                for row in parsed_evaluations
+                if row["proposition_index"] == proposition_index
+                and row["relation"] in allowed_relations
+                and row["axis_match"] == "exact"
+                and row["qualifier_fidelity"] == "preserved"
+            ]
+            if not eligible:
+                continue
+            # Candidate order is only a deterministic tie-breaker after every
+            # semantic hard check above has passed.
+            winner = min(eligible, key=lambda row: row["candidate_index"])
+            winners[proposition_index] = winner
+
+        selected_by_candidate: dict[int, dict] = {}
+        for proposition_index, winner in winners.items():
+            candidate_index = int(winner["candidate_index"])
             existing = selected_by_candidate.get(candidate_index)
             if existing is None:
                 selected_by_candidate[candidate_index] = {
@@ -274,7 +334,11 @@ class OllamaMemoryRelevanceGate:
                     "relevant": True,
                     "proposition_index": proposition_index,
                     "proposition_indices": [proposition_index],
-                    "reason": reason.strip()[:240],
+                    "reason": (
+                        f"{winner['relation']}; axis={winner['axis_match']}; "
+                        f"qualifiers={winner['qualifier_fidelity']}: "
+                        f"{winner['reason']}"
+                    )[:240],
                 }
             else:
                 existing["proposition_indices"].append(proposition_index)
@@ -287,7 +351,7 @@ class OllamaMemoryRelevanceGate:
                     "relevant": False,
                     "proposition_index": None,
                     "proposition_indices": [],
-                    "reason": "not selected for any frozen proposition",
+                    "reason": "not eligible under structured continuity rules",
                 },
             )
             for index in range(expected)
@@ -479,7 +543,7 @@ class OllamaMemoryRelevanceGate:
                     "propositions": self.last_propositions,
                     "candidates": candidate_payload,
                 },
-                num_predict=320,
+                num_predict=700,
                 parser=lambda raw: self._parse_selection(
                     raw,
                     expected=len(candidates),
