@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v9.1-thread-split"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v10-mode-aware"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -406,6 +406,7 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
                         "index": 0,
                         "text": "wants more direct interaction with patients at work",
                         "thread_core": "direct patient interaction at work",
+                        "continuity_mode": "gap",
                         "required_anchors": ["direct patient interaction", "work"],
                         "turn_modifiers": [],
                     }
@@ -563,6 +564,7 @@ async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypat
                         "index": 0,
                         "text": "wants more patient interaction at work",
                         "thread_core": "direct patient interaction at work",
+                        "continuity_mode": "gap",
                         "required_anchors": ["direct patient interaction", "work"],
                         "turn_modifiers": [],
                     }
