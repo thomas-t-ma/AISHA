@@ -245,6 +245,8 @@ class OllamaMemoryRelevanceGate:
         evaluations = payload.get("evaluations")
         if not isinstance(evaluations, list):
             return None
+        if len(candidate_topics) != expected:
+            return None
         if len(evaluations) > proposition_count * min(expected, 4):
             return None
 
@@ -259,6 +261,7 @@ class OllamaMemoryRelevanceGate:
         valid_fidelity = {"preserved", "dropped", "added", "conflict"}
 
         seen_pairs: set[tuple[int, int]] = set()
+        per_proposition_counts: dict[int, int] = {}
         parsed_evaluations: list[dict] = []
         for row in evaluations:
             if not isinstance(row, dict):
@@ -271,7 +274,6 @@ class OllamaMemoryRelevanceGate:
             qualifier_fidelity = row.get("qualifier_fidelity")
             reason = row.get("reason")
 
-            pair = (proposition_index, candidate_index)
             if (
                 not isinstance(proposition_index, int)
                 or proposition_index < 0
@@ -279,7 +281,6 @@ class OllamaMemoryRelevanceGate:
                 or not isinstance(candidate_index, int)
                 or candidate_index < 0
                 or candidate_index >= expected
-                or pair in seen_pairs
                 or not isinstance(topic_key, str)
                 or topic_key != candidate_topics[candidate_index]
                 or relation not in valid_relations
@@ -288,6 +289,14 @@ class OllamaMemoryRelevanceGate:
                 or not isinstance(reason, str)
             ):
                 return None
+
+            pair = (proposition_index, candidate_index)
+            if pair in seen_pairs:
+                return None
+            count = per_proposition_counts.get(proposition_index, 0) + 1
+            if count > min(expected, 4):
+                return None
+            per_proposition_counts[proposition_index] = count
 
             seen_pairs.add(pair)
             parsed_evaluations.append(
