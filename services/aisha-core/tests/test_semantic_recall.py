@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v8-predicate-preserving"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v9-thread-anchors"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -405,6 +405,9 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
                     {
                         "index": 0,
                         "text": "wants more direct interaction with patients at work",
+                        "thread_core": "direct patient interaction at work",
+                        "required_anchors": ["direct patient interaction", "work"],
+                        "turn_modifiers": [],
                     }
                 ],
             }
@@ -415,11 +418,11 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
                         "proposition_index": 0,
                         "candidate_index": 0,
                         "candidate_topic_key": "job_patient_interaction_level",
-                        "relation": "same_axis_state",
-                        "axis_match": "exact",
-                        "predicate_match": "contextual",
-                        "detail_coverage": "full",
-                        "reason": "same patient-contact axis",
+                        "relation": "background_state",
+                        "thread_match": "exact",
+                        "anchor_coverage": "full",
+                        "predicate_compatibility": "compatible",
+                        "reason": "same patient-contact thread",
                     }
                 ]
             }
@@ -464,16 +467,21 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
     analysis_payload = json.loads(requests[0]["messages"][1]["content"])
     assert set(analysis_payload) == {"current_user_message"}
     assert "candidates" not in analysis_payload
-    assert requests[0]["options"]["num_predict"] == 180
+    assert requests[0]["options"]["num_predict"] == 320
     assert requests[0]["think"] is False
     assert requests[0]["keep_alive"] == "30m"
 
     selection_payload = json.loads(requests[1]["messages"][1]["content"])
     assert "current_user_message" not in selection_payload
-    assert selection_payload["source_message"] == (
-        "I want work that feels more hands-on with the people I'm helping."
-    )
+    assert "source_message" not in selection_payload
     assert selection_payload["propositions"][0]["index"] == 0
+    assert selection_payload["propositions"][0]["thread_core"] == (
+        "direct patient interaction at work"
+    )
+    assert selection_payload["propositions"][0]["required_anchors"] == [
+        "direct patient interaction",
+        "work",
+    ]
     assert len(selection_payload["candidates"]) == 1
     candidate_payload = selection_payload["candidates"][0]
     assert "embedding_score" not in candidate_payload
@@ -551,7 +559,13 @@ async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypat
                 "message_scope": "personal_anchored",
                 "scope_reason": "specific patient-contact preference",
                 "propositions": [
-                    {"index": 0, "text": "wants more patient interaction at work"}
+                    {
+                        "index": 0,
+                        "text": "wants more patient interaction at work",
+                        "thread_core": "direct patient interaction at work",
+                        "required_anchors": ["direct patient interaction", "work"],
+                        "turn_modifiers": [],
+                    }
                 ],
             }
         else:
@@ -561,10 +575,10 @@ async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypat
                         "proposition_index": 0,
                         "candidate_index": 0,
                         "candidate_topic_key": "job_patient_interaction_level",
-                        "relation": "same_fact",
-                        "axis_match": "exact",
-                        "predicate_match": "exact",
-                        "detail_coverage": "full",
+                        "relation": "same_thread",
+                        "thread_match": "exact",
+                        "anchor_coverage": "full",
+                        "predicate_compatibility": "exact",
                         "reason": "direct proposition match",
                     }
                 ]
