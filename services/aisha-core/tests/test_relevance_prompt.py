@@ -8,11 +8,11 @@ from aisha.memory.relevance import (
 )
 
 
-def test_v10_1_physically_separates_message_analysis_from_candidate_selection():
+def test_v10_2_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v10.1-capacity-constraint"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v10.2-source-grounded-anchors"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
@@ -23,6 +23,7 @@ def test_v10_1_physically_separates_message_analysis_from_candidate_selection():
     assert "Do NOT choose a winner" in selection_prompt
     assert "thread_core" in analysis_prompt
     assert "continuity_mode" in analysis_prompt
+    assert "anchor_evidence" in analysis_prompt
     assert "schedule room" in analysis_prompt
     assert "missing capacity/resource" in analysis_prompt
     assert "required_anchors" in analysis_prompt
@@ -43,7 +44,10 @@ def test_analysis_parser_requires_no_propositions_for_nonpersonal_scope():
         }
     )
 
-    parsed = OllamaMemoryRelevanceGate._parse_analysis(raw)
+    parsed = OllamaMemoryRelevanceGate._parse_analysis(
+        raw,
+        source_message="I want more patient interaction at work.",
+    )
 
     assert parsed is not None
     assert parsed["message_scope"] == "general_informational"
@@ -71,6 +75,7 @@ def test_analysis_parser_requires_personal_proposition():
                     "thread_core": "direct patient interaction at work",
                     "continuity_mode": "gap",
                     "required_anchors": ["direct patient interaction", "work"],
+                    "anchor_evidence": ["patient interaction", "work"],
                     "turn_modifiers": [],
                 }
             ],
@@ -91,6 +96,33 @@ def test_analysis_parser_requires_personal_proposition():
         }
     )
     assert OllamaMemoryRelevanceGate._parse_analysis(invalid) is None
+
+
+def test_analysis_parser_rejects_unstated_required_anchor():
+    raw = json.dumps(
+        {
+            "message_scope": "personal_anchored",
+            "scope_reason": "specific patient-experience goal",
+            "propositions": [
+                {
+                    "index": 0,
+                    "text": "I want more direct patient experience.",
+                    "thread_core": "direct patient experience",
+                    "continuity_mode": "gap",
+                    "required_anchors": ["direct patient interaction", "medical student role"],
+                    "anchor_evidence": ["direct patient experience", "medical student role"],
+                    "turn_modifiers": [],
+                }
+            ],
+        }
+    )
+    assert (
+        OllamaMemoryRelevanceGate._parse_analysis(
+            raw,
+            source_message="I want more direct patient experience.",
+        )
+        is None
+    )
 
 
 def test_selection_parser_applies_thread_anchor_hard_rules():
@@ -340,7 +372,7 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
     assert parsed[1]["proposition_indices"] == [0, 1]
 
 
-def test_relevance_status_reports_v10_1_fields():
+def test_relevance_status_reports_v10_2_fields():
     gate = OllamaMemoryRelevanceGate(
         model="test-model",
         base_url="http://127.0.0.1:11434",
@@ -349,7 +381,7 @@ def test_relevance_status_reports_v10_1_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v10.1-capacity-constraint"
+    assert status["prompt_version"] == "personal-continuity-v10.2-source-grounded-anchors"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []
