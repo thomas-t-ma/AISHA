@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v10-mode-aware"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v10.1-capacity-constraint"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -44,8 +44,12 @@ personal fact. For each proposition assign continuity_mode:
   instance of one without an expressed gap, obstacle, or revision.
 - gap: the user misses, lacks, wants more/less of, or expresses a deficit on the
   thread. An older state on that exact thread may explain the current gap.
-- constraint: the proposition explicitly states an obstacle or circumstance
-  preventing/delaying the thread.
+- constraint: the proposition explicitly states an obstacle, circumstance, or
+  missing capacity/resource needed for the thread. This includes anchored
+  statements such as needing enough time, schedule room, availability, money,
+  access, or other capacity in order to do a named activity. Classify these as
+  constraint even when phrased as "I want/need enough room/time to ...".
+  Do NOT apply this rule to vague unanchored wishes such as "I want more time".
 - update: the proposition questions, strengthens, weakens, reverses, or revises
   a prior preference/decision/state.
 
