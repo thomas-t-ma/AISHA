@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v7-structured-axis"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v8-predicate-preserving"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -417,7 +417,8 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
                         "candidate_topic_key": "job_patient_interaction_level",
                         "relation": "same_axis_state",
                         "axis_match": "exact",
-                        "qualifier_fidelity": "preserved",
+                        "predicate_match": "contextual",
+                        "detail_coverage": "full",
                         "reason": "same patient-contact axis",
                     }
                 ]
@@ -469,13 +470,16 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
 
     selection_payload = json.loads(requests[1]["messages"][1]["content"])
     assert "current_user_message" not in selection_payload
+    assert selection_payload["source_message"] == (
+        "I want work that feels more hands-on with the people I'm helping."
+    )
     assert selection_payload["propositions"][0]["index"] == 0
     assert len(selection_payload["candidates"]) == 1
     candidate_payload = selection_payload["candidates"][0]
     assert "embedding_score" not in candidate_payload
     assert "lexical_score" not in candidate_payload
     assert "candidate_sources" not in candidate_payload
-    assert requests[1]["options"]["num_predict"] == 700
+    assert requests[1]["options"]["num_predict"] == 900
 
     status = gate.status()
     assert status["message_scope"] == "personal_anchored"
@@ -559,7 +563,8 @@ async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypat
                         "candidate_topic_key": "job_patient_interaction_level",
                         "relation": "same_fact",
                         "axis_match": "exact",
-                        "qualifier_fidelity": "preserved",
+                        "predicate_match": "exact",
+                        "detail_coverage": "full",
                         "reason": "direct proposition match",
                     }
                 ]
