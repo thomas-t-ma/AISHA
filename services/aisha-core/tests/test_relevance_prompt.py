@@ -25,7 +25,7 @@ def test_v8_physically_separates_message_analysis_from_candidate_selection():
     assert "predicate_match" in selection_prompt
     assert "detail_coverage" in selection_prompt
     assert "source_message" in selection_prompt
-    assert "Candidate retrieval order and score are not semantic evidence" in selection_prompt
+    assert "Candidate retrieval order and scores are not semantic evidence" in selection_prompt
     assert "MEMORY-ADDRESSABLE" in analysis_prompt
 
 
