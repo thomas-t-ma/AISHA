@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v8-predicate-preserving"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v9-thread-anchors"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -14,7 +14,13 @@ long-term memories are visible.
 Return ONLY JSON:
 {"message_scope":"personal_anchored|general_informational|ambiguous_unanchored",
  "scope_reason":"<=12 words",
- "propositions":[{"index":0,"text":"explicit personal proposition"}]}
+ "propositions":[
+   {"index":0,
+    "text":"faithful explicit personal proposition",
+    "thread_core":"enduring personal thread expressed by this proposition",
+    "required_anchors":["identity-defining concept"],
+    "turn_modifiers":["current-turn detail not required in an older memory"]}
+ ]}
 
 Classify the message from its own words.
 
@@ -22,34 +28,50 @@ personal_anchored:
 - The message itself expresses one or more specific, MEMORY-ADDRESSABLE personal
   situations, preferences, interests, values, decisions, goals, relationships,
   problems, updates, or ongoing threads.
-- Specific first-person declarative preferences and interests count only when
-  the object/domain/thread is identifiable from the message itself.
+- The object/domain/thread must be identifiable from the current message itself.
 - MEMORY-ADDRESSABLE means an unfamiliar reader could describe what kind of
   personal memory would match WITHOUT seeing any candidate memories.
 - If the message explicitly names the subject or domain, continuity language
   such as "still", "used to", "anymore", or "less than before" remains anchored
   to that named thread even when the previous state is implicit.
 - A generic personal desire or state is NOT enough when its object/domain is
-  missing or generic (for example: wanting "more outside work", "a change",
-  "more time", "something better", or "to get back to it").
-- For this scope, extract ONE proposition per independently storable personal
-  fact. A proposition should correspond to one memory-addressable claim.
-- SPLIT clauses when they express different objects, predicates, goals,
-  decisions, or preferences and each clause could stand alone as a meaningful
-  long-term memory.
-- Do NOT merge distinct facts merely because one explains, motivates, enables,
-  constrains, or gives the timing/purpose of the other.
-- Purpose/time clauses can contain a second explicit personal fact. If both the
-  main clause and that clause are independently memory-addressable, emit both.
-- KEEP clauses together when they are only multiple qualifiers or attributes of
-  the SAME object and relation, so splitting them would create fragments rather
-  than distinct memories.
-- Preserve ALL explicit discriminating qualifiers such as object, subtype,
-  target, domain, adjectives/modifiers, negation, comparison, time/status,
-  modality, and relation.
-- When multiple coordinated descriptors apply to the same object, keep every
-  descriptor in the same proposition. Never simplify away a modifier merely
-  because the remaining phrase is still grammatical or broadly understandable.
+  missing or generic.
+
+For personal_anchored, extract ONE proposition per independently storable
+personal fact. For each proposition:
+
+text:
+- Preserve the meaning of the user's explicit statement faithfully.
+- Preserve coordinated descriptors and negation; do not silently drop them.
+
+thread_core:
+- State the enduring personal thread that an older memory would need to identify.
+- Remove only episode-specific wording that does not define which memory thread
+  this is.
+- Do NOT add facts, causes, motives, or goals that were not stated.
+
+required_anchors:
+- Include every concept needed to distinguish the intended personal thread from
+  nearby but different memories.
+- Anchors may be semantic concepts rather than exact words.
+- Coordinated descriptors that change which preference/thread is identified
+  belong here.
+- Examples: "spicy/hot" AND "Thai food" distinguish a spicy-Thai preference;
+  "direct patient interaction" differs from generic clinical experience or
+  patient education; "remote work" differs from general schedule flexibility.
+
+turn_modifiers:
+- Put explicit details here only when an older memory need not contain them to
+  still identify the same personal thread.
+- Typical examples: tonight/today, "keep moving toward", intensity/emphasis,
+  incidental stylistic adjectives, or the fact that the thread is being
+  mentioned in this particular episode.
+- A turn modifier may refine the present situation, but its absence from an
+  older memory must not by itself make that memory irrelevant.
+
+Split propositions when clauses express independently storable threads.
+Keep multiple attributes together when they jointly define ONE thread.
+Use at most four propositions.
 
 general_informational:
 - The message asks for general facts, explanations, definitions,
@@ -59,91 +81,84 @@ general_informational:
 
 ambiguous_unanchored:
 - The message sounds personal or continuous but does not independently identify
-  a MEMORY-ADDRESSABLE object, topic, goal, preference, situation, or referent.
-- This includes generic personal wishes or states whose missing domain could
-  plausibly be completed by several unrelated memories.
+  a memory-addressable object, topic, goal, preference, situation, or referent.
 - Vague references such as "that", "it", "something", "more time", "a change",
-  "more outside work", "again", or "this time" do not identify a thread by
-  themselves.
-- Do not convert a generic wish into a specific topic such as hobbies, service,
-  career, school, relationships, or health.
-- Do not guess what missing context might be.
+  "more outside work", "again", or "this time" do not identify a thread alone.
+- Do not guess missing context from possible memories.
 - Return propositions=[].
 
-For personal_anchored, include only propositions stated by the message itself.
-Do not add likely causes, consequences, motives, background, or inferred goals.
-Use at most four propositions. If uncertain whether a specific personal thread
-is independently identifiable, prefer ambiguous_unanchored.
+If uncertain whether a specific personal thread is independently identifiable,
+prefer ambiguous_unanchored.
 """
 
 CANDIDATE_SELECTION_SYSTEM = """You evaluate candidate memories against frozen
 personal propositions extracted earlier. Phase 1 has already decided that the
 message is personal and memory-addressable.
 
-The payload includes source_message: the exact current user wording. Use it ONLY
-to preserve explicit qualifiers and predicate meaning already present in the
-frozen propositions. Never create a new proposition or infer a missing referent.
+Do NOT reinterpret the message or create new propositions. Use thread_core and
+required_anchors as authoritative. turn_modifiers are informative current-turn
+details but are NOT required to appear in an older memory.
 
-Do NOT choose a winner. Return a sparse shortlist of plausible candidates with
-structured labels so code can apply final hard rules.
+Do NOT choose a winner. Return structured evaluations for every plausibly
+related candidate, up to SIX candidates per proposition.
 
 Return ONLY JSON:
 {"evaluations":[
   {"proposition_index":0,"candidate_index":3,
    "candidate_topic_key":"example_topic",
-   "relation":"same_fact|same_axis_state|direct_constraint|prior_state_update|adjacent",
-   "axis_match":"exact|broader|narrower|different",
-   "predicate_match":"exact|contextual|different|conflict",
-   "detail_coverage":"full|partial|conflict",
+   "relation":"same_thread|background_state|direct_constraint|prior_state_update|adjacent",
+   "thread_match":"exact|broader|narrower|different",
+   "anchor_coverage":"full|partial|conflict",
+   "predicate_compatibility":"exact|compatible|different|conflict",
    "reason":"<=12 words"}
 ]}
 
-For each proposition, evaluate every candidate that is even plausibly related,
-up to SIX candidates. Omit clearly unrelated candidates.
+THREAD MATCH asks whether this is the SAME enduring personal thread:
+- exact: same distinguishing preference/goal/project/constraint/state thread.
+- broader: candidate collapses the thread into a more general category.
+- narrower: candidate changes it to a more specific sub-thread/activity.
+- different: another thread despite topical overlap.
 
-AXIS MATCH asks WHAT exact attribute/activity/value/constraint is discussed:
-- exact: same distinguishing semantic axis.
-- broader: candidate collapses a more specific axis into a broader category.
-- narrower: candidate introduces a more specific/different sub-axis.
-- different: candidate concerns another activity, value, or attribute.
-Sharing a broad topic (work, patients, medical school, food, computers) is NOT
-enough for exact.
+ANCHOR COVERAGE compares ONLY required_anchors:
+- full: every required anchor is represented semantically.
+- partial: at least one required anchor is missing.
+- conflict: a required anchor is contradicted.
+Do NOT penalize a candidate for omitting turn_modifiers.
 
-PREDICATE MATCH asks WHAT is asserted about that axis:
-- exact: same state, preference, goal, intention, decision, or interest.
-- contextual: predicate differs only in an allowed continuity relation below.
-- different: same topic/axis but a different claim.
-- conflict: claims are incompatible.
-
-DETAIL COVERAGE asks whether all discriminating information from the frozen
-proposition AND source_message is represented semantically:
-- full: no important descriptor, subtype, target, negation, comparison,
-  time/status, or relation is lost.
-- partial: candidate covers only part of those details.
-- conflict: an explicit detail conflicts.
-A candidate matching one coordinated descriptor but dropping another is partial.
+PREDICATE COMPATIBILITY:
+- exact: same enduring assertion.
+- compatible: wording/state differs in a way that directly supports continuity.
+  Examples include "crowds out" vs "makes difficult", a stable preference
+  explaining a current instance, or a stored low level explaining desire for
+  more on the same axis.
+- different: different assertion about the same topic/thread.
+- conflict: incompatible assertion.
 
 RELATION:
-- same_fact: direct paraphrase/restatement. Requires predicate_match=exact.
-- same_axis_state: stored state directly explains the current expressed gap or
-  desire on the exact same axis. Predicate may be contextual.
-- direct_constraint: stored circumstance directly corresponds to an obstacle
-  explicitly present in the proposition. Predicate may be contextual.
-- prior_state_update: current proposition changes/questions a prior state on the
-  exact same named axis. Predicate may be contextual.
-- adjacent: related but not one of the four relations above.
+- same_thread: direct restatement or stable preference/goal/project corresponding
+  to the current proposition.
+- background_state: stored state directly explains the current expressed gap or
+  desire on the exact same thread.
+- direct_constraint: stored constraint directly corresponds to the obstacle in
+  the proposition.
+- prior_state_update: current proposition revises/questions a prior state on the
+  exact same thread.
+- adjacent: topically related but not direct continuity.
 
 Important distinctions:
-- An intention to do something is different from uncertainty about its timing.
-- A specific direct-contact activity is broader/narrower/different from generic
-  experience in the same field.
-- A schedule constraint is not the same predicate as merely wanting consistency.
-- A named work arrangement is not equivalent to generic schedule flexibility.
-- If the user gives two coordinated descriptors for one preference, a memory
-  covering only one descriptor has partial detail coverage.
+- Intending to apply to medical school is not the same thread as uncertainty
+  about the exact application date.
+- Direct patient interaction is not generic clinical experience or patient
+  education.
+- A volunteering schedule constraint is not merely a desire for consistency.
+- Remote work is not generic schedule flexibility.
+- A stable preference may match a specific current instance even if an episode
+  detail such as "tonight" is absent from the memory.
+- Project/style adjectives need not match unless Phase 1 made them a
+  required_anchor.
 
-Candidate retrieval order and scores are not semantic evidence. Be conservative.
-If uncertain, downgrade axis/predicate/detail coverage rather than upgrading it.
+Candidate retrieval order and scores are not semantic evidence. Be conservative:
+when a required anchor is missing, mark partial rather than forcing a match.
 """
 
 # Backward-compatible inspection surface for tests/status tooling. Production
@@ -221,16 +236,47 @@ class OllamaMemoryRelevanceGate:
                 return None
             index = proposition.get("index")
             text = proposition.get("text")
+            thread_core = proposition.get("thread_core")
+            required_anchors = proposition.get("required_anchors")
+            turn_modifiers = proposition.get("turn_modifiers")
             if (
                 not isinstance(index, int)
                 or index < 0
                 or index in seen
                 or not isinstance(text, str)
                 or not text.strip()
+                or not isinstance(thread_core, str)
+                or not thread_core.strip()
+                or not isinstance(required_anchors, list)
+                or not required_anchors
+                or len(required_anchors) > 8
+                or not all(
+                    isinstance(item, str) and item.strip()
+                    for item in required_anchors
+                )
+                or not isinstance(turn_modifiers, list)
+                or len(turn_modifiers) > 8
+                or not all(
+                    isinstance(item, str) and item.strip()
+                    for item in turn_modifiers
+                )
             ):
                 return None
+
             seen.add(index)
-            parsed.append({"index": index, "text": text.strip()[:320]})
+            parsed.append(
+                {
+                    "index": index,
+                    "text": text.strip()[:320],
+                    "thread_core": thread_core.strip()[:320],
+                    "required_anchors": [
+                        item.strip()[:120] for item in required_anchors
+                    ],
+                    "turn_modifiers": [
+                        item.strip()[:120] for item in turn_modifiers
+                    ],
+                }
+            )
 
         parsed.sort(key=lambda row: row["index"])
         if [row["index"] for row in parsed] != list(range(len(parsed))):
@@ -271,15 +317,15 @@ class OllamaMemoryRelevanceGate:
             return None
 
         valid_relations = {
-            "same_fact",
-            "same_axis_state",
+            "same_thread",
+            "background_state",
             "direct_constraint",
             "prior_state_update",
             "adjacent",
         }
-        valid_axis = {"exact", "broader", "narrower", "different"}
-        valid_predicate = {"exact", "contextual", "different", "conflict"}
+        valid_thread = {"exact", "broader", "narrower", "different"}
         valid_coverage = {"full", "partial", "conflict"}
+        valid_predicate = {"exact", "compatible", "different", "conflict"}
 
         seen_pairs: set[tuple[int, int]] = set()
         per_proposition_counts: dict[int, int] = {}
@@ -291,9 +337,9 @@ class OllamaMemoryRelevanceGate:
             candidate_index = row.get("candidate_index")
             topic_key = row.get("candidate_topic_key")
             relation = row.get("relation")
-            axis_match = row.get("axis_match")
-            predicate_match = row.get("predicate_match")
-            detail_coverage = row.get("detail_coverage")
+            thread_match = row.get("thread_match")
+            anchor_coverage = row.get("anchor_coverage")
+            predicate_compatibility = row.get("predicate_compatibility")
             reason = row.get("reason")
 
             if (
@@ -306,9 +352,9 @@ class OllamaMemoryRelevanceGate:
                 or not isinstance(topic_key, str)
                 or topic_key != candidate_topics[candidate_index]
                 or relation not in valid_relations
-                or axis_match not in valid_axis
-                or predicate_match not in valid_predicate
-                or detail_coverage not in valid_coverage
+                or thread_match not in valid_thread
+                or anchor_coverage not in valid_coverage
+                or predicate_compatibility not in valid_predicate
                 or not isinstance(reason, str)
             ):
                 return None
@@ -321,59 +367,50 @@ class OllamaMemoryRelevanceGate:
                 return None
             per_proposition_counts[proposition_index] = count
             seen_pairs.add(pair)
-
             parsed_evaluations.append(
                 {
                     "proposition_index": proposition_index,
                     "candidate_index": candidate_index,
                     "relation": relation,
-                    "axis_match": axis_match,
-                    "predicate_match": predicate_match,
-                    "detail_coverage": detail_coverage,
+                    "thread_match": thread_match,
+                    "anchor_coverage": anchor_coverage,
+                    "predicate_compatibility": predicate_compatibility,
                     "reason": reason.strip()[:240],
                 }
             )
 
         allowed_relations = {
-            "same_fact",
-            "same_axis_state",
+            "same_thread",
+            "background_state",
             "direct_constraint",
             "prior_state_update",
         }
         relation_priority = {
-            "same_fact": 4,
+            "same_thread": 4,
             "prior_state_update": 3,
             "direct_constraint": 3,
-            "same_axis_state": 2,
+            "background_state": 2,
         }
-        predicate_priority = {"exact": 2, "contextual": 1}
+        predicate_priority = {"exact": 2, "compatible": 1}
 
         winners: dict[int, dict] = {}
         for proposition_index in range(proposition_count):
-            eligible: list[dict] = []
-            for row in parsed_evaluations:
-                if row["proposition_index"] != proposition_index:
-                    continue
-                if row["relation"] not in allowed_relations:
-                    continue
-                if row["axis_match"] != "exact":
-                    continue
-                if row["detail_coverage"] != "full":
-                    continue
-                if row["relation"] == "same_fact":
-                    if row["predicate_match"] != "exact":
-                        continue
-                elif row["predicate_match"] not in {"exact", "contextual"}:
-                    continue
-                eligible.append(row)
-
+            eligible = [
+                row
+                for row in parsed_evaluations
+                if row["proposition_index"] == proposition_index
+                and row["relation"] in allowed_relations
+                and row["thread_match"] == "exact"
+                and row["anchor_coverage"] == "full"
+                and row["predicate_compatibility"] in {"exact", "compatible"}
+            ]
             if not eligible:
                 continue
             winner = max(
                 eligible,
                 key=lambda row: (
                     relation_priority[row["relation"]],
-                    predicate_priority[row["predicate_match"]],
+                    predicate_priority[row["predicate_compatibility"]],
                     -int(row["candidate_index"]),
                 ),
             )
@@ -390,9 +427,9 @@ class OllamaMemoryRelevanceGate:
                     "proposition_index": proposition_index,
                     "proposition_indices": [proposition_index],
                     "reason": (
-                        f"{winner['relation']}; axis={winner['axis_match']}; "
-                        f"predicate={winner['predicate_match']}; "
-                        f"details={winner['detail_coverage']}: "
+                        f"{winner['relation']}; thread={winner['thread_match']}; "
+                        f"anchors={winner['anchor_coverage']}; "
+                        f"predicate={winner['predicate_compatibility']}: "
                         f"{winner['reason']}"
                     )[:240],
                 }
@@ -414,9 +451,10 @@ class OllamaMemoryRelevanceGate:
             if rows:
                 summary = rows[0]
                 reason = (
-                    f"rejected: {summary['relation']}; axis={summary['axis_match']}; "
-                    f"predicate={summary['predicate_match']}; "
-                    f"details={summary['detail_coverage']}: "
+                    f"rejected: {summary['relation']}; "
+                    f"thread={summary['thread_match']}; "
+                    f"anchors={summary['anchor_coverage']}; "
+                    f"predicate={summary['predicate_compatibility']}: "
                     f"{summary['reason']}"
                 )[:240]
             else:
@@ -572,7 +610,7 @@ class OllamaMemoryRelevanceGate:
                 phase="analysis",
                 system_prompt=MESSAGE_ANALYSIS_SYSTEM,
                 user_payload={"current_user_message": user_text},
-                num_predict=180,
+                num_predict=320,
                 parser=self._parse_analysis,
             )
         except Exception as exc:  # noqa: BLE001 - recall must never break chat
@@ -617,7 +655,6 @@ class OllamaMemoryRelevanceGate:
                 phase="selection",
                 system_prompt=CANDIDATE_SELECTION_SYSTEM,
                 user_payload={
-                    "source_message": user_text,
                     "propositions": self.last_propositions,
                     "candidates": candidate_payload,
                 },
