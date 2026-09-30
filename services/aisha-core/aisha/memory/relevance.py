@@ -26,6 +26,9 @@ personal_anchored:
   the object/domain/thread is identifiable from the message itself.
 - MEMORY-ADDRESSABLE means an unfamiliar reader could describe what kind of
   personal memory would match WITHOUT seeing any candidate memories.
+- If the message explicitly names the subject or domain, continuity language
+  such as "still", "used to", "anymore", or "less than before" remains anchored
+  to that named thread even when the previous state is implicit.
 - A generic personal desire or state is NOT enough when its object/domain is
   missing or generic (for example: wanting "more outside work", "a change",
   "more time", "something better", or "to get back to it").
@@ -85,7 +88,10 @@ The proposition list is authoritative. Candidate memories may NEVER create,
 reinterpret, broaden, narrow, or add a proposition.
 
 For each proposition, choose AT MOST ONE candidate: the memory whose DEFINING
-PROPOSITION is the closest faithful semantic match.
+PROPOSITION is the closest faithful continuity match on the same subject,
+domain, and attribute. A valid continuity match may be the same fact, a stored
+state directly corresponding to the current gap, an explicit constraint, or a
+prior state being updated on the same named thread.
 
 Require QUALIFIER FIDELITY:
 - Preserve meaningful object, subtype, target, domain, time/status, modality,
@@ -94,7 +100,9 @@ Require QUALIFIER FIDELITY:
 - A narrower memory that adds an unexpressed qualifier is weaker.
 - A nearby goal, value, consequence, explanation, cause, preference, or context
   is not a match merely because it would make sense.
-- Prefer semantic equivalence over word overlap.
+- Compare subject, domain, and attribute fidelity before surface wording.
+- Prefer the candidate preserving the most distinguishing qualifiers.
+- Reject a nearby activity, goal, or preference even when it shares more words.
 
 Reject candidates that are merely compatible, adjacent, redundant, background,
 a subset/superset, a plausible cause/consequence, or an inferred companion.
