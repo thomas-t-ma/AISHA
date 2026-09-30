@@ -207,6 +207,11 @@ def print_result(result: dict) -> None:
                     "        anchors: "
                     + ", ".join(str(item) for item in proposition["required_anchors"])
                 )
+            if proposition.get("anchor_evidence"):
+                print(
+                    "        evidence: "
+                    + ", ".join(str(item) for item in proposition["anchor_evidence"])
+                )
             if proposition.get("turn_modifiers"):
                 print(
                     "        modifiers: "
