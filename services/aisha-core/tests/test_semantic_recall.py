@@ -408,7 +408,10 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
                         "thread_core": "direct patient interaction at work",
                         "continuity_mode": "gap",
                         "required_anchors": ["direct patient interaction", "work"],
-                        "anchor_evidence": ["patient interaction", "work"],
+                        "anchor_evidence": [
+                            "hands-on with the people I'm helping",
+                            "work",
+                        ],
                         "turn_modifiers": [],
                     }
                 ],
