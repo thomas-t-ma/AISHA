@@ -6,7 +6,7 @@ from typing import Callable
 
 import httpx
 
-RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v9-thread-anchors"
+RELEVANCE_GATE_PROMPT_VERSION = "personal-continuity-v9.1-thread-split"
 
 MESSAGE_ANALYSIS_SYSTEM = """You analyze ONLY the user's current message before any
 long-term memories are visible.
@@ -70,7 +70,15 @@ turn_modifiers:
   older memory must not by itself make that memory irrelevant.
 
 Split propositions when clauses express independently storable threads.
-Keep multiple attributes together when they jointly define ONE thread.
+- Apply this especially to coordination with words such as "and", "while",
+  "but", "plus", or "alongside": if each side independently names a personal
+  thread that could be stored as its own memory, emit separate propositions.
+- Never combine required_anchors from two independent domains merely because
+  they appear in one sentence.
+- Example: wanting more direct patient experience WHILE preparing for medical
+  school is TWO propositions: the patient-experience thread and the
+  medical-school-preparation/application thread.
+Keep multiple attributes together only when they jointly define ONE thread.
 Use at most four propositions.
 
 general_informational:
@@ -138,7 +146,9 @@ RELATION:
 - same_thread: direct restatement or stable preference/goal/project corresponding
   to the current proposition.
 - background_state: stored state directly explains the current expressed gap or
-  desire on the exact same thread.
+  desire on the exact same thread and SAME underlying property. Do NOT use
+  background_state merely because a separate circumstance could plausibly
+  motivate the user's goal.
 - direct_constraint: stored constraint directly corresponds to the obstacle in
   the proposition.
 - prior_state_update: current proposition revises/questions a prior state on the
@@ -146,8 +156,12 @@ RELATION:
 - adjacent: topically related but not direct continuity.
 
 Important distinctions:
-- Intending to apply to medical school is not the same thread as uncertainty
-  about the exact application date.
+- Progress toward an enduring goal is still the SAME THREAD as a stored plan to
+  pursue that goal. Words such as "keep moving toward" or "eventually" usually
+  describe the current episode rather than a different long-term thread.
+- Intending/applying to medical school is NOT the same thread as uncertainty
+  about the exact application date. Timeline uncertainty must not become
+  background_state merely because uncertainty could motivate making progress.
 - Direct patient interaction is not generic clinical experience or patient
   education.
 - A volunteering schedule constraint is not merely a desire for consistency.
