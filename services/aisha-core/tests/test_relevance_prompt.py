@@ -8,11 +8,11 @@ from aisha.memory.relevance import (
 )
 
 
-def test_v7_physically_separates_message_analysis_from_candidate_selection():
+def test_v8_physically_separates_message_analysis_from_candidate_selection():
     analysis_prompt = " ".join(MESSAGE_ANALYSIS_SYSTEM.split())
     selection_prompt = " ".join(CANDIDATE_SELECTION_SYSTEM.split())
 
-    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v7-structured-axis"
+    assert RELEVANCE_GATE_PROMPT_VERSION == "personal-continuity-v8-predicate-preserving"
     assert "current message before any long-term memories are visible" in analysis_prompt
     assert "personal_anchored" in analysis_prompt
     assert "general_informational" in analysis_prompt
@@ -22,7 +22,9 @@ def test_v7_physically_separates_message_analysis_from_candidate_selection():
     assert "frozen personal propositions" in selection_prompt
     assert "Do NOT choose a winner" in selection_prompt
     assert "axis_match" in selection_prompt
-    assert "qualifier_fidelity" in selection_prompt
+    assert "predicate_match" in selection_prompt
+    assert "detail_coverage" in selection_prompt
+    assert "source_message" in selection_prompt
     assert "Candidate retrieval order and score are not semantic evidence" in selection_prompt
     assert "MEMORY-ADDRESSABLE" in analysis_prompt
 
@@ -87,7 +89,8 @@ def test_selection_parser_applies_structured_axis_hard_rules():
                     "candidate_topic_key": "patient_education_interest",
                     "relation": "same_fact",
                     "axis_match": "different",
-                    "qualifier_fidelity": "preserved",
+                    "predicate_match": "exact",
+                    "detail_coverage": "full",
                     "reason": "different patient activity",
                 },
                 {
@@ -96,7 +99,8 @@ def test_selection_parser_applies_structured_axis_hard_rules():
                     "candidate_topic_key": "job_patient_interaction_level",
                     "relation": "same_axis_state",
                     "axis_match": "exact",
-                    "qualifier_fidelity": "preserved",
+                    "predicate_match": "exact",
+                    "detail_coverage": "full",
                     "reason": "same direct-patient-contact axis",
                 },
             ]
@@ -117,7 +121,7 @@ def test_selection_parser_applies_structured_axis_hard_rules():
     assert "same_axis_state" in parsed[1]["reason"]
 
 
-def test_selection_parser_verifies_topic_index_and_uses_order_only_after_hard_checks():
+def test_selection_parser_verifies_topic_index_and_uses_semantic_priority_before_order():
     wrong_topic_echo = json.dumps(
         {
             "evaluations": [
@@ -127,7 +131,8 @@ def test_selection_parser_verifies_topic_index_and_uses_order_only_after_hard_ch
                     "candidate_topic_key": "remote_work_preference",
                     "relation": "same_fact",
                     "axis_match": "exact",
-                    "qualifier_fidelity": "preserved",
+                    "predicate_match": "exact",
+                    "detail_coverage": "full",
                     "reason": "wrong echoed topic",
                 }
             ]
@@ -152,7 +157,8 @@ def test_selection_parser_verifies_topic_index_and_uses_order_only_after_hard_ch
                     "candidate_topic_key": "second",
                     "relation": "same_fact",
                     "axis_match": "exact",
-                    "qualifier_fidelity": "preserved",
+                    "predicate_match": "exact",
+                    "detail_coverage": "full",
                     "reason": "eligible second",
                 },
                 {
@@ -161,7 +167,8 @@ def test_selection_parser_verifies_topic_index_and_uses_order_only_after_hard_ch
                     "candidate_topic_key": "first",
                     "relation": "same_axis_state",
                     "axis_match": "exact",
-                    "qualifier_fidelity": "preserved",
+                    "predicate_match": "exact",
+                    "detail_coverage": "full",
                     "reason": "eligible first",
                 },
             ]
@@ -174,8 +181,8 @@ def test_selection_parser_verifies_topic_index_and_uses_order_only_after_hard_ch
         candidate_topics=["first", "second"],
     )
     assert parsed is not None
-    assert parsed[0]["relevant"] is True
-    assert parsed[1]["relevant"] is False
+    assert parsed[0]["relevant"] is False
+    assert parsed[1]["relevant"] is True
 
 
 def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
@@ -188,7 +195,8 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
                     "candidate_topic_key": "keyboard_preference",
                     "relation": "same_fact",
                     "axis_match": "exact",
-                    "qualifier_fidelity": "preserved",
+                    "predicate_match": "exact",
+                    "detail_coverage": "full",
                     "reason": "smooth linear switches",
                 },
                 {
@@ -197,7 +205,8 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
                     "candidate_topic_key": "keyboard_preference",
                     "relation": "same_fact",
                     "axis_match": "exact",
-                    "qualifier_fidelity": "preserved",
+                    "predicate_match": "exact",
+                    "detail_coverage": "full",
                     "reason": "quiet keyboard preference",
                 },
             ]
@@ -217,7 +226,7 @@ def test_selection_parser_allows_one_candidate_to_cover_multiple_propositions():
     assert parsed[1]["proposition_indices"] == [0, 1]
 
 
-def test_relevance_status_reports_v7_fields():
+def test_relevance_status_reports_v8_fields():
     gate = OllamaMemoryRelevanceGate(
         model="test-model",
         base_url="http://127.0.0.1:11434",
@@ -226,7 +235,7 @@ def test_relevance_status_reports_v7_fields():
     status = gate.status()
 
     assert status["model"] == "test-model"
-    assert status["prompt_version"] == "personal-continuity-v7-structured-axis"
+    assert status["prompt_version"] == "personal-continuity-v8-predicate-preserving"
     assert status["message_scope"] is None
     assert status["scope_reason"] is None
     assert status["propositions"] == []
