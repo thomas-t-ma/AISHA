@@ -102,7 +102,7 @@ async def test_semantic_retriever_selects_related_verified_belief_and_caches_doc
         },
     ]
     assert "previously stated personal memory" in retriever.status()["query_instruction"]
-    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v6.3-contextual-continuity"
+    assert retriever.status()["pipeline_version"] == "hybrid-final-gate-v7-structured-axis"
 
     second = await retriever.recall(
         "I miss doing something directly useful for people.",
@@ -410,12 +410,15 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
             }
         else:
             response_payload = {
-                "matches": [
+                "evaluations": [
                     {
                         "proposition_index": 0,
                         "candidate_index": 0,
                         "candidate_topic_key": "job_patient_interaction_level",
-                        "reason": "closest patient-contact match",
+                        "relation": "same_axis_state",
+                        "axis_match": "exact",
+                        "qualifier_fidelity": "preserved",
+                        "reason": "same patient-contact axis",
                     }
                 ]
             }
@@ -472,7 +475,7 @@ async def test_ollama_relevance_gate_uses_memory_blind_analysis_then_selection(m
     assert "embedding_score" not in candidate_payload
     assert "lexical_score" not in candidate_payload
     assert "candidate_sources" not in candidate_payload
-    assert requests[1]["options"]["num_predict"] == 320
+    assert requests[1]["options"]["num_predict"] == 700
 
     status = gate.status()
     assert status["message_scope"] == "personal_anchored"
@@ -549,11 +552,14 @@ async def test_relevance_gate_retries_analysis_once_after_invalid_json(monkeypat
             }
         else:
             response_payload = {
-                "matches": [
+                "evaluations": [
                     {
                         "proposition_index": 0,
                         "candidate_index": 0,
                         "candidate_topic_key": "job_patient_interaction_level",
+                        "relation": "same_fact",
+                        "axis_match": "exact",
+                        "qualifier_fidelity": "preserved",
                         "reason": "direct proposition match",
                     }
                 ]
