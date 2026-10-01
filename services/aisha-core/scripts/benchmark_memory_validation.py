@@ -22,7 +22,7 @@ from aisha.memory.validation_benchmark import (
 from aisha.settings import Settings
 
 
-FROZEN_PROFILE = "mac-m2max-96gb"
+ALLOWED_PROFILES = {"mac-m2max-96gb", "nvidia-5080"}
 FROZEN_GATE_MODEL = "qwen3.5:35b-mlx"
 FROZEN_EMBEDDING_MODEL = "qwen3-embedding:4b"
 FROZEN_GATE_VERSION = "personal-continuity-v10.2-source-grounded-anchors"
@@ -40,6 +40,15 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument(
+        "--profile",
+        choices=sorted(ALLOWED_PROFILES),
+        default="nvidia-5080",
+        help=(
+            "Hardware profile. Only profiles with the frozen model/memory "
+            "configuration are allowed."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("/tmp/aisha-memory-validation-unseen-v1.json"),
@@ -48,8 +57,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def assert_frozen_configuration(profile) -> None:
+def assert_frozen_configuration(profile, *, profile_name: str) -> None:
     problems: list[str] = []
+    if profile_name not in ALLOWED_PROFILES:
+        problems.append(
+            f"profile {profile_name!r} is not one of {sorted(ALLOWED_PROFILES)!r}"
+        )
     if RELEVANCE_GATE_PROMPT_VERSION != FROZEN_GATE_VERSION:
         problems.append(
             f"gate version {RELEVANCE_GATE_PROMPT_VERSION!r} != {FROZEN_GATE_VERSION!r}"
@@ -223,9 +236,9 @@ def print_failures(results: list[dict]) -> None:
 
 async def main() -> None:
     args = parse_args()
-    settings = Settings(aisha_profile=FROZEN_PROFILE)
+    settings = Settings(aisha_profile=args.profile)
     profile = settings.load_profile()
-    assert_frozen_configuration(profile)
+    assert_frozen_configuration(profile, profile_name=args.profile)
 
     beliefs = validation_beliefs()
     cases = validation_cases()
@@ -267,7 +280,7 @@ async def main() -> None:
     payload = {
         "suite_version": VALIDATION_SUITE_VERSION,
         "frozen_configuration": {
-            "profile": FROZEN_PROFILE,
+            "profile": args.profile,
             "gate_model": FROZEN_GATE_MODEL,
             "embedding_model": FROZEN_EMBEDDING_MODEL,
             "gate_version": FROZEN_GATE_VERSION,
