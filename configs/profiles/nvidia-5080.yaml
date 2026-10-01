@@ -1,0 +1,43 @@
+name: nvidia-5080
+compute:
+  class: nvidia-16gb-high-performance
+  gpu: NVIDIA GeForce RTX 5080
+  vram_gb: 16
+llm:
+  provider: ollama
+  model: qwen3.5:35b-mlx
+  base_url: http://127.0.0.1:11434
+  api_key_env: null
+  think: false
+  preload: true
+  keep_alive: 30m
+  options:
+    num_ctx: 32768
+memory:
+  semantic_recall: true
+  embedding_model: qwen3-embedding:4b
+  embedding_base_url: http://127.0.0.1:11434
+  embedding_keep_alive: 30m
+  semantic_threshold: 0.72
+  semantic_candidate_floor: 0.30
+  semantic_limit: 2
+  semantic_relevance_gate: true
+  semantic_query_instruction: >-
+    Given a user's current message, retrieve a previously stated personal memory
+    that is directly relevant and useful for responding. Prefer the same
+    situation or underlying concern even when phrased differently; avoid merely
+    topical or generic associations.
+stt:
+  provider: disabled
+  planned_provider: faster-whisper
+tts:
+  provider: disabled
+  planned_provider: kokoro-local
+vision:
+  provider: disabled
+notes: >-
+  AISHA development profile for the Windows RTX 5080 workstation. Memory and
+  model settings intentionally match the frozen v10.2 validation configuration
+  used on the M2 Max so cross-machine regression results remain comparable.
+  Ollama remains external to Git; model weights and machine-local state are not
+  committed.
