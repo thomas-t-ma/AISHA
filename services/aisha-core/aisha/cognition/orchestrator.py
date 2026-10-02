@@ -9,6 +9,7 @@ from time import perf_counter
 from aisha.character.loader import PersonaPackage
 from aisha.contracts.events import AISHAEvent
 from aisha.contracts.turns import Message, TurnContext
+from aisha.embodiment.state import EmbodimentDirector
 from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.quotes import original_source_quote
@@ -32,6 +33,7 @@ class AISHAOrchestrator:
         reflector: OllamaReflector | None = None,
         evidence_verifier: OllamaEvidenceVerifier | None = None,
         semantic_retriever: OllamaSemanticMemoryRetriever | None = None,
+        embodiment_director: EmbodimentDirector | None = None,
     ) -> None:
         self.store = store
         self.persona = persona
@@ -40,6 +42,7 @@ class AISHAOrchestrator:
         self.reflector = reflector
         self.evidence_verifier = evidence_verifier
         self.semantic_retriever = semantic_retriever
+        self.embodiment_director = embodiment_director or EmbodimentDirector()
         self._reflections: set[asyncio.Task[None]] = set()
         self._last_reflection_error: str | None = None
         self._last_reflection_result: dict | None = None
@@ -59,6 +62,27 @@ class AISHAOrchestrator:
             "last_error": self._last_reflection_error,
             "last_result": self._last_reflection_result,
         }
+
+    def embodiment_status(self) -> dict:
+        return self.embodiment_director.snapshot().model_dump(mode="json")
+
+    async def _embodiment_event(
+        self,
+        *,
+        session_id: str,
+        turn_id: str,
+        activity: str,
+    ) -> AISHAEvent:
+        state = self.embodiment_director.transition(activity)
+        event = AISHAEvent(
+            session_id=session_id,
+            turn_id=turn_id,
+            source="aisha.embodiment",
+            type="aisha.embodiment.state",
+            payload=state.model_dump(mode="json"),
+        )
+        await self.store.add_event(event)
+        return event
 
     async def wait_for_reflections(self) -> None:
         if self._reflections:
@@ -448,6 +472,11 @@ class AISHAOrchestrator:
             },
         )
         yield started_event
+        yield await self._embodiment_event(
+            session_id=session_id,
+            turn_id=context.turn_id,
+            activity="thinking",
+        )
 
         try:
             async for chunk in self.llm_provider.stream_turn(context):
@@ -460,6 +489,11 @@ class AISHAOrchestrator:
                         total_ms=total_ms,
                         output_chars=sum(len(text_chunk) for text_chunk in chunks),
                         backend_metrics=backend_metrics,
+                    )
+                    yield await self._embodiment_event(
+                        session_id=session_id,
+                        turn_id=context.turn_id,
+                        activity="idle",
                     )
                     cancelled_event = await self._persisted_event(
                         session_id=session_id,
@@ -483,6 +517,11 @@ class AISHAOrchestrator:
 
                 if first_token_ms is None:
                     first_token_ms = (perf_counter() - started) * 1000
+                    yield await self._embodiment_event(
+                        session_id=session_id,
+                        turn_id=context.turn_id,
+                        activity="speaking",
+                    )
 
                 chunks.append(chunk.text)
                 delta_event = await self._persisted_event(
@@ -502,6 +541,11 @@ class AISHAOrchestrator:
                     total_ms=total_ms,
                     output_chars=sum(len(text_chunk) for text_chunk in chunks),
                     backend_metrics=backend_metrics,
+                )
+                yield await self._embodiment_event(
+                    session_id=session_id,
+                    turn_id=context.turn_id,
+                    activity="idle",
                 )
                 cancelled_event = await self._persisted_event(
                     session_id=session_id,
@@ -527,6 +571,11 @@ class AISHAOrchestrator:
                 error=str(exc),
                 backend_metrics=backend_metrics,
             )
+            yield await self._embodiment_event(
+                session_id=session_id,
+                turn_id=context.turn_id,
+                activity="idle",
+            )
             failed_event = await self._persisted_event(
                 session_id=session_id,
                 turn_id=context.turn_id,
@@ -550,6 +599,11 @@ class AISHAOrchestrator:
             total_ms=total_ms,
             output_chars=len(final_text),
             backend_metrics=backend_metrics,
+        )
+        yield await self._embodiment_event(
+            session_id=session_id,
+            turn_id=context.turn_id,
+            activity="idle",
         )
         finished_event = await self._persisted_event(
             session_id=session_id,
