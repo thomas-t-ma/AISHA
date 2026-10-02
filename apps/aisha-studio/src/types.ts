@@ -28,10 +28,12 @@ export interface CameraStatus {
   latest_captured_at: string | null;
   privacy: {
     camera_active: boolean;
-    raw_pixels_in_core: boolean;
+    raw_pixels_in_semantic_state: boolean;
     capture_persisted: boolean;
+    raw_frame_scope: 'none' | 'ephemeral-provider-memory' | string;
   };
   checked_at: string;
+  last_error?: string | null;
 }
 
 export interface RuntimeHealth {
