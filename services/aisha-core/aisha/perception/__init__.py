@@ -1,4 +1,10 @@
-from aisha.perception.base import BoundingBox, VisionFrame, VisionObservation, VisionProvider
+from aisha.perception.base import (
+    BoundingBox,
+    PerceptionSummary,
+    VisionFrame,
+    VisionObservation,
+    VisionProvider,
+)
 from aisha.perception.camera import (
     CameraFrameDescriptor,
     CameraSource,
@@ -19,6 +25,7 @@ __all__ = [
     "MockCameraSource",
     "MockVisionProvider",
     "PerceptionHub",
+    "PerceptionSummary",
     "VisionFrame",
     "VisionObservation",
     "VisionProvider",
