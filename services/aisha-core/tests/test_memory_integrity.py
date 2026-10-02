@@ -505,3 +505,30 @@ async def test_local_reflector_atomic_retry_requests_new_add_without_format(
     assert await reflector.reformulate_as_atomic_add(
         original["source_quote"], original, existing
     ) is None
+
+
+
+def test_memory_integrity_endpoint_is_model_free_and_clean_on_fresh_store(
+    tmp_path, monkeypatch
+):
+    from fastapi.testclient import TestClient
+
+    from aisha.main import app
+
+    monkeypatch.setenv("AISHA_PROFILE", "mock")
+    monkeypatch.setenv("AISHA_DATA_DIR", str(tmp_path))
+    with TestClient(app) as client:
+        result = client.get("/v1/memory/integrity")
+        assert result.status_code == 200
+        assert result.json() == {
+            "ok": True,
+            "episodes": 0,
+            "beliefs": 0,
+            "versions": 0,
+            "issue_count": 0,
+            "issues": [],
+        }
+
+        health = client.get("/v1/health")
+        assert health.status_code == 200
+        assert health.json()["memory_integrity"]["ok"] is True
