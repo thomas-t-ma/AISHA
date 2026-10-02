@@ -608,6 +608,7 @@ export default function App() {
                 />
                 <CameraPrivacyControl
                   status={cameraStatus}
+                  perception={perceptionSummary}
                   disabled={connection !== 'online' || updatingCamera}
                   onToggle={(enabled) => void changeCamera(enabled)}
                 />
