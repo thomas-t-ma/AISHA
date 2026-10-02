@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -9,8 +10,14 @@ from aisha.perception.camera import CameraFrameDescriptor, CameraSource
 class CameraController:
     """Owns explicit camera enablement and transient capture metadata."""
 
-    def __init__(self, source: CameraSource) -> None:
+    def __init__(
+        self,
+        source: CameraSource,
+        *,
+        on_disable: Callable[[], None] | None = None,
+    ) -> None:
         self.source = source
+        self._on_disable = on_disable
         self._latest: CameraFrameDescriptor | None = None
         self._captures_seen = 0
 
@@ -21,6 +28,8 @@ class CameraController:
     def disable(self) -> dict[str, Any]:
         self.source.disable()
         self._latest = None
+        if self._on_disable is not None:
+            self._on_disable()
         return self.status()
 
     async def capture_once(self) -> CameraFrameDescriptor | None:
