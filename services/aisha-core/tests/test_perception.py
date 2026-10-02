@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from aisha.perception.base import BoundingBox, VisionFrame, VisionObservation
+from aisha.perception.camera import CameraFrameDescriptor, MockCameraSource
+from aisha.perception.controller import CameraController
 from aisha.perception.hub import PerceptionHub
 from aisha.perception.mock import DisabledVisionProvider, MockVisionProvider
 
@@ -101,3 +103,46 @@ async def test_perception_hub_tracks_latest_structured_frame():
     hub.clear()
     assert hub.latest() is None
     assert hub.status()["observation_count"] == 0
+
+
+
+@pytest.mark.asyncio
+async def test_camera_controller_is_explicitly_disabled_until_enabled():
+    frame = CameraFrameDescriptor(
+        frame_ref="mock://frame/1",
+        source_id="camera_front",
+        width=1280,
+        height=720,
+    )
+    source = MockCameraSource([frame])
+    controller = CameraController(source)
+
+    initial = controller.status()
+    assert initial["enabled"] is False
+    assert initial["privacy"]["camera_active"] is False
+    assert initial["privacy"]["raw_pixels_in_core"] is False
+    assert initial["privacy"]["capture_persisted"] is False
+    assert await controller.capture_once() is None
+
+    enabled = controller.enable()
+    assert enabled["enabled"] is True
+    assert enabled["privacy"]["camera_active"] is True
+
+    captured = await controller.capture_once()
+    assert captured is not None
+    assert captured.frame_ref == "mock://frame/1"
+    assert controller.status()["captures_seen"] == 1
+    assert controller.latest() is not None
+
+    disabled = controller.disable()
+    assert disabled["enabled"] is False
+    assert disabled["privacy"]["camera_active"] is False
+    assert controller.latest() is None
+
+
+def test_camera_descriptor_excludes_raw_pixels():
+    fields = CameraFrameDescriptor.model_fields
+    assert "image" not in fields
+    assert "bytes" not in fields
+    assert "pixels" not in fields
+    assert "frame_ref" in fields
