@@ -106,11 +106,12 @@ async def lifespan(app: FastAPI):
             relevance_gate=semantic_relevance_gate,
             query_instruction=profile.memory.semantic_query_instruction,
         )
+    perception = build_perception_components(settings, profile)
     orchestrator = AISHAOrchestrator(
         store, persona, provider, ledger=ledger, reflector=reflector,
         evidence_verifier=evidence_verifier, semantic_retriever=semantic_retriever,
+        perception_summary_provider=perception.hub.summary,
     )
-    perception = build_perception_components(settings, profile)
     perception.runtime.start()
 
     app.state.aisha = {
