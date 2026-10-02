@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from aisha.perception.base import BoundingBox, VisionFrame, VisionObservation
+from aisha.perception.hub import PerceptionHub
 from aisha.perception.mock import DisabledVisionProvider, MockVisionProvider
 
 
@@ -64,3 +65,39 @@ def test_vision_contract_excludes_raw_image_bytes():
     assert "image" not in fields
     assert "bytes" not in fields
     assert "image_ref" in fields
+
+
+
+@pytest.mark.asyncio
+async def test_perception_hub_tracks_latest_structured_frame():
+    first = VisionFrame(
+        source_id="camera_front",
+        observations=[
+            VisionObservation(kind="person", confidence=0.9, label="person")
+        ],
+    )
+    second = VisionFrame(
+        source_id="camera_front",
+        observations=[
+            VisionObservation(kind="gaze", confidence=0.8, label="toward_camera")
+        ],
+    )
+    provider = MockVisionProvider([first, second])
+    hub = PerceptionHub(provider)
+
+    assert hub.latest() is None
+    await hub.poll_once()
+    assert hub.latest() is not None
+    assert hub.latest().frame_id == first.frame_id
+    assert hub.status()["frames_seen"] == 1
+
+    await hub.poll_once()
+    latest = hub.latest()
+    assert latest is not None
+    assert latest.frame_id == second.frame_id
+    assert hub.status()["frames_seen"] == 2
+    assert hub.status()["observation_count"] == 1
+
+    hub.clear()
+    assert hub.latest() is None
+    assert hub.status()["observation_count"] == 0
