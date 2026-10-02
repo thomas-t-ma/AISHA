@@ -41,6 +41,18 @@ class VisionFrame(BaseModel):
     image_ref: str | None = Field(default=None, max_length=500)
 
 
+class PerceptionSummary(BaseModel):
+    """Small observable-only summary suitable for cognition/renderers."""
+
+    frame_id: str | None = None
+    source_id: str | None = None
+    person_present: bool = False
+    person_count: int = Field(default=0, ge=0)
+    gaze_toward_camera: bool = False
+    observation_kinds: list[str] = Field(default_factory=list)
+    captured_at: datetime | None = None
+
+
 class VisionProvider(Protocol):
     name: str
 
