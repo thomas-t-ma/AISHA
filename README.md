@@ -225,6 +225,28 @@ If a target database already exists, restore first creates a timestamped
 command reports success. Model weights, virtual environments, `.env`, and other
 machine-specific runtime files are intentionally not part of this bundle.
 
+## Embodiment and perception skeleton
+
+AISHA Core now has hardware-independent contracts for a visible body and future
+computer vision. The embodiment director emits deterministic semantic states
+(`thinking`, `speaking`, `idle`) as `aisha.embodiment.state` events; a
+future renderer decides how those states become animation clips, blendshapes,
+gaze, or body motion.
+
+The perception layer defines structured `VisionFrame` / `VisionObservation`
+contracts, a deterministic mock provider, and a `PerceptionHub` that retains
+only the latest structured scene state. Core starts with vision disabled: no
+camera is opened and no raw image bytes are persisted.
+
+Developer endpoints:
+
+- `GET /v1/embodiment/state`
+- `GET /v1/perception/status`
+- `GET /v1/perception/latest`
+
+See `docs/EMBODIMENT_PERCEPTION.md` for the renderer/provider boundary and
+planned milestones.
+
 ## Autonomous memory v1 (experimental)
 
 Voice is still on a separate branch; this branch builds on the text-only Studio.
