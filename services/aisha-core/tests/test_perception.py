@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 
+from aisha.perception.analyzer import MockVisionAnalyzer
 from aisha.perception.base import BoundingBox, VisionFrame, VisionObservation
 from aisha.perception.camera import CameraFrameDescriptor, MockCameraSource
 from aisha.perception.controller import CameraController
 from aisha.perception.hub import PerceptionHub
 from aisha.perception.mock import DisabledVisionProvider, MockVisionProvider
+from aisha.perception.runtime import PerceptionRuntime
 
 
 @pytest.mark.asyncio
@@ -183,3 +185,51 @@ async def test_perception_summary_ignores_low_confidence_observations():
     assert summary.person_count == 0
     assert summary.gaze_toward_camera is True
     assert summary.observation_kinds == ["gaze"]
+
+
+
+@pytest.mark.asyncio
+async def test_perception_runtime_requires_camera_enablement_and_emits_structured_state():
+    capture = CameraFrameDescriptor(
+        frame_ref="mock://capture/1",
+        source_id="camera_front",
+        width=640,
+        height=480,
+    )
+    camera_source = MockCameraSource([capture])
+    hub = PerceptionHub(DisabledVisionProvider())
+    controller = CameraController(camera_source, on_disable=hub.clear)
+    analyzer = MockVisionAnalyzer(
+        [[
+            VisionObservation(kind="person", confidence=0.97, label="person"),
+            VisionObservation(
+                kind="gaze",
+                confidence=0.88,
+                label="toward_camera",
+            ),
+        ]]
+    )
+    runtime = PerceptionRuntime(controller, analyzer, hub)
+
+    assert await runtime.step() is None
+    assert hub.latest() is None
+    assert runtime.status()["analysis_steps"] == 0
+
+    controller.enable()
+    frame = await runtime.step()
+    assert frame is not None
+    assert frame.image_ref == "mock://capture/1"
+    assert frame.source_id == "camera_front"
+    assert frame.width == 640
+    assert frame.height == 480
+    assert [item.kind for item in frame.observations] == ["person", "gaze"]
+
+    summary = hub.summary()
+    assert summary.person_present is True
+    assert summary.person_count == 1
+    assert summary.gaze_toward_camera is True
+    assert runtime.status()["analysis_steps"] == 1
+
+    controller.disable()
+    assert hub.latest() is None
+    assert hub.summary().person_present is False
