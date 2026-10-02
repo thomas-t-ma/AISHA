@@ -171,6 +171,30 @@ start **New conversation**, and ask AISHA what you explicitly asked her to
 remember. Edit/remove that entry and ask again in another new session.
 Voice work remains isolated on `feature/voice-v1` until you have a microphone.
 
+## Deterministic memory integrity audit
+
+AISHA can verify the autobiographical memory ledger without calling any model.
+The audit checks active-belief/revision consistency, contiguous revision history,
+source episode linkage, exact source-quote provenance, and SQLite foreign-key
+integrity. It does not rewrite memory content.
+
+From `services/aisha-core`:
+
+```powershell
+python scripts\audit_memory_ledger.py
+```
+
+For machine-readable output:
+
+```powershell
+python scripts\audit_memory_ledger.py --json
+```
+
+AISHA Core also runs the same audit at startup. The startup snapshot appears in
+`/v1/health`, and `/v1/memory/integrity` runs a fresh audit on demand. This is
+intended to be run before and after copying AISHA's local database between
+machines.
+
 ## Autonomous memory v1 (experimental)
 
 Voice is still on a separate branch; this branch builds on the text-only Studio.
