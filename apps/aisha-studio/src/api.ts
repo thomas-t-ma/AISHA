@@ -14,6 +14,17 @@ export function getEmbodimentState(): Promise<EmbodimentState> {
   return json<EmbodimentState>('/v1/embodiment/state');
 }
 
+export function setEmbodimentAffect(
+  affect: EmbodimentState['affect'],
+  intensity: number,
+): Promise<EmbodimentState> {
+  return json<EmbodimentState>('/v1/embodiment/affect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ affect, intensity }),
+  });
+}
+
 export async function createSession(): Promise<string> {
   const created = await json<{ session_id: string }>('/v1/sessions', {
     method: 'POST',
