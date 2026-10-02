@@ -155,6 +155,225 @@ class ExperienceLedger:
 
         return await asyncio.to_thread(work)
 
+    async def audit_integrity(self) -> dict:
+        """Deterministically verify memory lineage and source provenance.
+
+        The audit never calls a model and never mutates memory content. Issue
+        records intentionally contain identifiers/codes rather than belief text
+        or source quotes so they are safe to log during local maintenance.
+        """
+        def work() -> dict:
+            issues: list[dict] = []
+            with self.store._connect() as db:
+                counts = {
+                    "episodes": int(
+                        db.execute("SELECT COUNT(*) FROM auto_episodes").fetchone()[0]
+                    ),
+                    "beliefs": int(
+                        db.execute("SELECT COUNT(*) FROM auto_beliefs").fetchone()[0]
+                    ),
+                    "versions": int(
+                        db.execute(
+                            "SELECT COUNT(*) FROM auto_belief_versions"
+                        ).fetchone()[0]
+                    ),
+                }
+
+                for row in db.execute("PRAGMA foreign_key_check").fetchall():
+                    issues.append(
+                        {
+                            "code": "foreign_key_violation",
+                            "table": str(row["table"]),
+                            "rowid": row["rowid"],
+                            "parent": str(row["parent"]),
+                        }
+                    )
+
+                beliefs = db.execute(
+                    "SELECT * FROM auto_beliefs ORDER BY belief_id"
+                ).fetchall()
+                mirrored_fields = (
+                    "text",
+                    "epistemic_status",
+                    "evidence_status",
+                    "source_quote",
+                    "source_session_id",
+                    "source_turn_id",
+                    "source_episode_id",
+                    "open_question",
+                )
+
+                for belief in beliefs:
+                    belief_id = str(belief["belief_id"])
+                    topic_key = str(belief["topic_key"])
+                    active_revision = int(belief["revision"])
+
+                    if topic_key != topic_key.strip().lower():
+                        issues.append(
+                            {
+                                "code": "noncanonical_topic_key",
+                                "belief_id": belief_id,
+                            }
+                        )
+
+                    versions = db.execute(
+                        """SELECT * FROM auto_belief_versions
+                        WHERE belief_id = ? ORDER BY revision ASC, rowid ASC""",
+                        (belief_id,),
+                    ).fetchall()
+                    if not versions:
+                        issues.append(
+                            {
+                                "code": "missing_version_history",
+                                "belief_id": belief_id,
+                            }
+                        )
+                    else:
+                        revisions = [int(row["revision"]) for row in versions]
+                        if len(revisions) != len(set(revisions)):
+                            issues.append(
+                                {
+                                    "code": "duplicate_revision",
+                                    "belief_id": belief_id,
+                                }
+                            )
+
+                        expected = list(range(1, active_revision + 1))
+                        if revisions != expected:
+                            issues.append(
+                                {
+                                    "code": "non_contiguous_revision_history",
+                                    "belief_id": belief_id,
+                                    "active_revision": active_revision,
+                                    "history_revisions": revisions,
+                                }
+                            )
+
+                        latest = versions[-1]
+                        if int(latest["revision"]) != active_revision:
+                            issues.append(
+                                {
+                                    "code": "latest_revision_mismatch",
+                                    "belief_id": belief_id,
+                                    "active_revision": active_revision,
+                                    "latest_revision": int(latest["revision"]),
+                                }
+                            )
+
+                        differing_fields = [
+                            field
+                            for field in mirrored_fields
+                            if belief[field] != latest[field]
+                        ]
+                        if differing_fields:
+                            issues.append(
+                                {
+                                    "code": "active_belief_differs_from_latest_version",
+                                    "belief_id": belief_id,
+                                    "fields": differing_fields,
+                                }
+                            )
+
+                    lineage_rows = [
+                        {
+                            "source_episode_id": belief["source_episode_id"],
+                            "source_session_id": belief["source_session_id"],
+                            "source_turn_id": belief["source_turn_id"],
+                            "source_quote": belief["source_quote"],
+                            "revision": active_revision,
+                            "kind": "active",
+                        }
+                    ]
+                    lineage_rows.extend(
+                        {
+                            "source_episode_id": version["source_episode_id"],
+                            "source_session_id": version["source_session_id"],
+                            "source_turn_id": version["source_turn_id"],
+                            "source_quote": version["source_quote"],
+                            "revision": int(version["revision"]),
+                            "kind": "version",
+                        }
+                        for version in versions
+                    )
+
+                    for lineage in lineage_rows:
+                        episode = db.execute(
+                            "SELECT * FROM auto_episodes WHERE episode_id = ?",
+                            (lineage["source_episode_id"],),
+                        ).fetchone()
+                        issue_base = {
+                            "belief_id": belief_id,
+                            "revision": lineage["revision"],
+                            "record_kind": lineage["kind"],
+                        }
+                        if episode is None:
+                            issues.append(
+                                {
+                                    "code": "source_episode_missing",
+                                    **issue_base,
+                                }
+                            )
+                            continue
+                        if (
+                            episode["session_id"] != lineage["source_session_id"]
+                            or episode["turn_id"] != lineage["source_turn_id"]
+                        ):
+                            issues.append(
+                                {
+                                    "code": "source_episode_identity_mismatch",
+                                    **issue_base,
+                                }
+                            )
+                        quote = lineage["source_quote"]
+                        if not isinstance(quote, str) or quote not in episode["user_text"]:
+                            issues.append(
+                                {
+                                    "code": "source_quote_not_in_episode",
+                                    **issue_base,
+                                }
+                            )
+
+                # Versions have a belief FK but intentionally preserve source
+                # episode IDs as historical provenance. Check those episode
+                # references explicitly because older schemas did not enforce
+                # them as foreign keys.
+                orphan_versions = db.execute(
+                    """SELECT v.belief_id, v.revision
+                    FROM auto_belief_versions AS v
+                    LEFT JOIN auto_episodes AS e
+                      ON e.episode_id = v.source_episode_id
+                    WHERE e.episode_id IS NULL
+                    ORDER BY v.belief_id, v.revision"""
+                ).fetchall()
+                known_orphans = {
+                    (
+                        issue.get("belief_id"),
+                        issue.get("revision"),
+                    )
+                    for issue in issues
+                    if issue["code"] == "source_episode_missing"
+                }
+                for row in orphan_versions:
+                    key = (str(row["belief_id"]), int(row["revision"]))
+                    if key not in known_orphans:
+                        issues.append(
+                            {
+                                "code": "source_episode_missing",
+                                "belief_id": key[0],
+                                "revision": key[1],
+                                "record_kind": "version",
+                            }
+                        )
+
+                return {
+                    "ok": not issues,
+                    **counts,
+                    "issue_count": len(issues),
+                    "issues": issues,
+                }
+
+        return await asyncio.to_thread(work)
+
     async def forget_belief(self, belief_id: str) -> bool:
         """Delete this derived belief and its interpretations; original chats remain."""
         def work() -> bool:
