@@ -86,7 +86,7 @@ class OpenCVCameraSource:
                 )
                 return
             self._capture = capture
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - isolate optional camera backend failures
             self._capture = None
             self._last_error = str(exc)
 
@@ -311,7 +311,7 @@ class MediaPipeFaceAnalyzer:
                 observations=observations,
                 image_ref=None,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - isolate optional vision backend failures
             self._last_error = str(exc)
             return None
 
