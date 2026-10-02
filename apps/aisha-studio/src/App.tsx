@@ -202,6 +202,7 @@ export default function App() {
 
   useEffect(() => {
     if (!cameraStatus?.enabled) {
+      setPerceptionSummary(null);
       return;
     }
 
@@ -395,7 +396,9 @@ export default function App() {
     if (updatingCamera || connection !== 'online') return;
     setUpdatingCamera(true);
     try {
-      setCameraStatus(await setCameraEnabled(enabled));
+      const next = await setCameraEnabled(enabled);
+      setCameraStatus(next);
+      if (!next.enabled) setPerceptionSummary(null);
       setNotice('');
     } catch {
       setNotice('Could not change camera privacy state.');
