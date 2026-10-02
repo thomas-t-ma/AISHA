@@ -1,4 +1,4 @@
-import type { AISHAEvent, AutomaticMemoryStatus, BeliefVersion, LearnedBelief, MemoryRecord, ModelRun, RuntimeHealth, StoredMessage } from './types';
+import type { AISHAEvent, AutomaticMemoryStatus, BeliefVersion, EmbodimentState, LearnedBelief, MemoryRecord, ModelRun, RuntimeHealth, StoredMessage } from './types';
 
 async function json<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -8,6 +8,10 @@ async function json<T>(url: string, options?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<RuntimeHealth> {
   return json<RuntimeHealth>('/v1/health');
+}
+
+export function getEmbodimentState(): Promise<EmbodimentState> {
+  return json<EmbodimentState>('/v1/embodiment/state');
 }
 
 export async function createSession(): Promise<string> {
