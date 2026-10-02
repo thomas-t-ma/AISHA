@@ -16,7 +16,9 @@ from aisha.perception.local import (
     OpenCVCameraSource,
 )
 from aisha.perception.mock import DisabledVisionProvider, MockVisionProvider
+from aisha.perception.registry import build_perception_components
 from aisha.perception.runtime import PerceptionRuntime
+from aisha.settings import Settings
 
 
 @pytest.mark.asyncio
@@ -396,3 +398,25 @@ def test_mediapipe_result_translation_stays_observable_only():
     )
     assert hub.summary().person_present is True
     assert hub.summary().person_count == 1
+
+
+
+def test_perception_registry_selects_local_backend_without_opening_camera(tmp_path):
+    settings = Settings(
+        aisha_profile="mock",
+        aisha_data_dir=str(tmp_path),
+        aisha_vision_provider="local-mediapipe",
+    )
+    profile = settings.load_profile()
+    components = build_perception_components(settings, profile)
+
+    camera_status = components.camera.status()
+    analyzer_status = components.runtime.analyzer.status()
+
+    assert camera_status["source"] == "opencv-camera"
+    assert camera_status["enabled"] is False
+    assert camera_status["raw_frame_scope"] == "ephemeral-provider-memory"
+    assert analyzer_status["analyzer"] == "mediapipe-face-landmarker"
+    assert analyzer_status["enabled"] is False
+    assert analyzer_status["model_path"].endswith("models/face_landmarker.task")
+    assert components.hub.latest() is None
