@@ -1,5 +1,6 @@
 param(
-    [string]$Profile = "mock"
+    [string]$Profile = "mock",
+    [switch]$Vision
 )
 
 $ErrorActionPreference = "Stop"
@@ -74,7 +75,18 @@ Write-Host "Installing AISHA Core dependencies..."
 Push-Location $Core
 try {
     & $VenvPython -m pip install --upgrade pip
-    & $VenvPython -m pip install -e ".[dev]"
+    $coreExtra = if ($Vision) { ".[dev,vision-local]" } else { ".[dev]" }
+    & $VenvPython -m pip install -e $coreExtra
+    if ($LASTEXITCODE -ne 0) {
+        throw "AISHA Core dependency installation failed."
+    }
+
+    if ($Vision) {
+        & $VenvPython scripts\setup_local_vision.py --download-model
+        if ($LASTEXITCODE -ne 0) {
+            throw "AISHA local vision setup failed."
+        }
+    }
 }
 finally {
     Pop-Location
@@ -114,5 +126,7 @@ finally {
 Write-Host ""
 Write-Host "AISHA Windows development environment is ready."
 Write-Host "Profile: $Profile"
+Write-Host "Vision: $Vision"
 Write-Host "Start everything from the repository root with:"
-Write-Host "  .\Start-AISHA.ps1 -Profile $Profile"
+$visionFlag = if ($Vision) { " -Vision" } else { "" }
+Write-Host "  .\Start-AISHA.ps1 -Profile $Profile$visionFlag"
