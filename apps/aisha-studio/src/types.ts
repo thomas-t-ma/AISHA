@@ -3,6 +3,8 @@ export interface EmbodimentState {
   activity: 'idle' | 'listening' | 'thinking' | 'speaking';
   expression: 'neutral' | 'attentive' | 'focused' | 'engaged';
   intensity: number;
+  affect: 'neutral' | 'warm' | 'amused' | 'curious' | 'concerned' | 'surprised';
+  affect_intensity: number;
   updated_at: string;
 }
 
