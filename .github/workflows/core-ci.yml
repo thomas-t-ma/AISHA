@@ -2,7 +2,7 @@ name: AISHA Core CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/semantic-recall-v1]
   pull_request:
 
 jobs:
