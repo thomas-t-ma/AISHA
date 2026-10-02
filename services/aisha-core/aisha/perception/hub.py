@@ -14,11 +14,15 @@ class PerceptionHub:
         self._latest: VisionFrame | None = None
         self._frames_seen = 0
 
+    def accept(self, frame: VisionFrame) -> VisionFrame:
+        self._latest = frame.model_copy(deep=True)
+        self._frames_seen += 1
+        return frame
+
     async def poll_once(self) -> VisionFrame | None:
         frame = await self.provider.observe()
         if frame is not None:
-            self._latest = frame.model_copy(deep=True)
-            self._frames_seen += 1
+            self.accept(frame)
         return frame
 
     def latest(self) -> VisionFrame | None:
