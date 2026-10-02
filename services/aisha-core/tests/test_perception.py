@@ -115,7 +115,8 @@ async def test_camera_controller_is_explicitly_disabled_until_enabled():
         height=720,
     )
     source = MockCameraSource([frame])
-    controller = CameraController(source)
+    cleared = []
+    controller = CameraController(source, on_disable=lambda: cleared.append(True))
 
     initial = controller.status()
     assert initial["enabled"] is False
@@ -138,6 +139,7 @@ async def test_camera_controller_is_explicitly_disabled_until_enabled():
     assert disabled["enabled"] is False
     assert disabled["privacy"]["camera_active"] is False
     assert controller.latest() is None
+    assert cleared == [True]
 
 
 def test_camera_descriptor_excludes_raw_pixels():
