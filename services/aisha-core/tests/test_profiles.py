@@ -7,6 +7,7 @@ def test_profiles_load():
         "mac-apple-silicon",
         "mac-m2max-96gb",
         "nvidia-2070",
+        "nvidia-5080",
         "nvidia-high",
     ]:
         profile = Settings(aisha_profile=name).load_profile()
@@ -30,3 +31,29 @@ def test_m2max_profile_preloads_conversation_model():
     assert profile.memory.semantic_relevance_model is None
     assert profile.memory.semantic_relevance_base_url is None
     assert profile.memory.semantic_relevance_keep_alive is None
+
+
+
+def test_vision_profile_defaults_disabled():
+    profile = Settings(aisha_profile="mock").load_profile()
+
+    assert profile.vision.provider == "disabled"
+    assert profile.vision.camera_index == 0
+    assert profile.vision.source_id == "camera_front"
+    assert profile.vision.poll_interval_seconds == 0.5
+    assert profile.vision.num_faces == 2
+    assert profile.vision.model_path is None
+
+
+def test_vision_profile_environment_overrides():
+    settings = Settings(
+        aisha_profile="mock",
+        aisha_vision_provider="local-mediapipe",
+        aisha_vision_camera_index=2,
+        aisha_vision_model_path="models/custom_face_landmarker.task",
+    )
+    profile = settings.load_profile()
+
+    assert profile.vision.provider == "local-mediapipe"
+    assert profile.vision.camera_index == 2
+    assert profile.vision.model_path == "models/custom_face_landmarker.task"
