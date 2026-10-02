@@ -41,6 +41,11 @@ export interface RuntimeHealth {
     provider?: string;
     observation_count?: number;
     camera?: CameraStatus;
+    analyzer?: {
+      enabled?: boolean;
+      analyzer?: string;
+    };
+    analysis_steps?: number;
   };
 }
 
