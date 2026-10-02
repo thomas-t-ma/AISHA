@@ -18,6 +18,8 @@ def test_embodiment_director_transitions_are_deterministic():
     assert initial.activity == "idle"
     assert initial.expression == "neutral"
     assert initial.intensity == 0.20
+    assert initial.affect == "neutral"
+    assert initial.affect_intensity == 0.0
 
     thinking = director.transition("thinking")
     assert thinking.sequence == 1
@@ -28,13 +30,30 @@ def test_embodiment_director_transitions_are_deterministic():
     same = director.transition("thinking")
     assert same.sequence == 1
 
+    amused = director.set_affect("amused", intensity=0.35)
+    assert amused.sequence == 2
+    assert amused.activity == "thinking"
+    assert amused.affect == "amused"
+    assert amused.affect_intensity == 0.35
+
     speaking = director.transition("speaking")
-    assert speaking.sequence == 2
+    assert speaking.sequence == 3
     assert speaking.expression == "engaged"
+    assert speaking.affect == "amused"
+    assert speaking.affect_intensity == 0.35
+
+    same_affect = director.set_affect("amused", intensity=0.35)
+    assert same_affect.sequence == 3
 
     idle = director.transition("idle")
-    assert idle.sequence == 3
+    assert idle.sequence == 4
     assert idle.expression == "neutral"
+    assert idle.affect == "amused"
+
+    cleared = director.clear_affect()
+    assert cleared.sequence == 5
+    assert cleared.affect == "neutral"
+    assert cleared.affect_intensity == 0.0
 
 
 @pytest.mark.asyncio
@@ -72,5 +91,29 @@ async def test_turn_stream_emits_renderer_independent_embodiment_states(tmp_path
         "neutral",
     ]
     assert all(event.source == "aisha.embodiment" for event in embodiment)
+    assert all(event.payload["affect"] == "neutral" for event in embodiment)
     assert events[-1].type == "aisha.turn.finished"
     assert orchestrator.embodiment_status()["activity"] == "idle"
+
+
+def test_orchestrator_affect_control_is_independent_of_activity(tmp_path):
+    settings = Settings(aisha_profile="mock")
+    store = AISHAStore(tmp_path / "aisha.sqlite3")
+    orchestrator = AISHAOrchestrator(
+        store,
+        load_persona(settings.character_dir),
+        MockLLMProvider(),
+    )
+
+    thinking = orchestrator.embodiment_director.transition("thinking")
+    assert thinking.activity == "thinking"
+
+    affected = orchestrator.set_embodiment_affect("curious", intensity=0.4)
+    assert affected["activity"] == "thinking"
+    assert affected["expression"] == "focused"
+    assert affected["affect"] == "curious"
+    assert affected["affect_intensity"] == 0.4
+
+    speaking = orchestrator.embodiment_director.transition("speaking")
+    assert speaking.activity == "speaking"
+    assert speaking.affect == "curious"
