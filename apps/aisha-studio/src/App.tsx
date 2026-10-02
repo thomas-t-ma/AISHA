@@ -2,20 +2,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import {
   createSession,
+  getCameraStatus,
   getEmbodimentState,
   getEvents,
   getHealth,
   getMessages,
   getRuns,
   getSessionSettings,
+  setCameraEnabled,
   setEmbodimentAffect,
   setSessionMemoryMode,
 } from './api';
 import AffectControls from './AffectControls';
+import CameraPrivacyControl from './CameraPrivacyControl';
 import EmbodimentPreview from './EmbodimentPreview';
 import MemoryPanel from './MemoryPanel';
 import type {
   AISHAEvent,
+  CameraStatus,
   ChatMessage,
   EmbodimentState,
   ModelRun,
@@ -117,6 +121,7 @@ export default function App() {
   );
   const [health, setHealth] = useState<RuntimeHealth | null>(null);
   const [embodiment, setEmbodiment] = useState<EmbodimentState>(DEFAULT_EMBODIMENT);
+  const [cameraStatus, setCameraStatus] = useState<CameraStatus | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [connection, setConnection] = useState<'connecting' | 'online' | 'offline'>('connecting');
@@ -134,6 +139,7 @@ export default function App() {
   const [memoryMode, setMemoryMode] = useState<'normal' | 'test'>('normal');
   const [updatingMemoryMode, setUpdatingMemoryMode] = useState(false);
   const [updatingAffect, setUpdatingAffect] = useState(false);
+  const [updatingCamera, setUpdatingCamera] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const creatingRef = useRef(false);
@@ -144,6 +150,7 @@ export default function App() {
       const nextHealth = await getHealth();
       setHealth(nextHealth);
       if (nextHealth.embodiment) setEmbodiment(nextHealth.embodiment);
+      if (nextHealth.perception?.camera) setCameraStatus(nextHealth.perception.camera);
     } catch {
       setHealth(null);
       setNotice('AISHA Core is unavailable. Start the Python server on port 8000.');
@@ -163,6 +170,9 @@ export default function App() {
     void refreshHealth();
     void getEmbodimentState()
       .then(setEmbodiment)
+      .catch(() => undefined);
+    void getCameraStatus()
+      .then(setCameraStatus)
       .catch(() => undefined);
   }, [refreshHealth]);
 
@@ -353,6 +363,19 @@ export default function App() {
     }));
   }
 
+  async function changeCamera(enabled: boolean) {
+    if (updatingCamera || connection !== 'online') return;
+    setUpdatingCamera(true);
+    try {
+      setCameraStatus(await setCameraEnabled(enabled));
+      setNotice('');
+    } catch {
+      setNotice('Could not change camera privacy state.');
+    } finally {
+      setUpdatingCamera(false);
+    }
+  }
+
   async function changeAffect(
     affect: EmbodimentState['affect'],
     intensity: number,
@@ -535,11 +558,18 @@ export default function App() {
           {messages.length === 0 ? (
             <div className="welcome">
               <EmbodimentPreview state={embodiment} />
-              <AffectControls
-                state={embodiment}
-                disabled={connection !== 'online' || updatingAffect}
-                onChange={(affect, intensity) => void changeAffect(affect, intensity)}
-              />
+              <div className="embodiment-debug-grid">
+                <AffectControls
+                  state={embodiment}
+                  disabled={connection !== 'online' || updatingAffect}
+                  onChange={(affect, intensity) => void changeAffect(affect, intensity)}
+                />
+                <CameraPrivacyControl
+                  status={cameraStatus}
+                  disabled={connection !== 'online' || updatingCamera}
+                  onToggle={(enabled) => void changeCamera(enabled)}
+                />
+              </div>
               <div className="eyebrow welcome-eyebrow">A PLACE TO BEGIN</div>
               <h2>She's here.</h2>
               <p>Start a conversation and watch the development embodiment react to AISHA's live turn state.</p>
