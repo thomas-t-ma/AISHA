@@ -52,6 +52,12 @@ async def lifespan(app: FastAPI):
 
     ledger = ExperienceLedger(store)
     await ledger.initialize()
+    memory_integrity_startup = await ledger.audit_integrity()
+    if not memory_integrity_startup["ok"]:
+        logger.warning(
+            "AISHA memory ledger integrity audit found %s issue(s)",
+            memory_integrity_startup["issue_count"],
+        )
     reflector = None
     evidence_verifier = None
     semantic_retriever = None
@@ -112,6 +118,7 @@ async def lifespan(app: FastAPI):
         "provider": provider,
         "orchestrator": orchestrator,
         "ledger": ledger,
+        "memory_integrity_startup": memory_integrity_startup,
         "warmup_metrics": warmup_metrics,
     }
     yield
