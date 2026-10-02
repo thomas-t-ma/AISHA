@@ -176,6 +176,12 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert summary.json()["gaze_toward_camera"] is False
         assert summary.json()["observation_kinds"] == []
 
+        runtime = client.get("/v1/perception/runtime")
+        assert runtime.status_code == 200
+        assert runtime.json()["camera"]["enabled"] is False
+        assert runtime.json()["analyzer"]["enabled"] is False
+        assert runtime.json()["analysis_steps"] == 0
+
         health = client.get("/v1/health")
         assert health.status_code == 200
         assert health.json()["embodiment"]["activity"] == "idle"
@@ -183,3 +189,5 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert health.json()["perception"]["enabled"] is False
         assert health.json()["perception"]["camera"]["enabled"] is False
         assert health.json()["perception"]["camera"]["privacy"]["camera_active"] is False
+        assert health.json()["perception"]["analyzer"]["enabled"] is False
+        assert health.json()["perception"]["analysis_steps"] == 0
