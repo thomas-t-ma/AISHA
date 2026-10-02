@@ -3,7 +3,6 @@ from __future__ import annotations
 from aisha.memory.benchmark import synthetic_beliefs
 from aisha.memory.pipeline_benchmark import PipelineRecallCase
 
-
 VALIDATION_SUITE_VERSION = "unseen-v1-2026-09-30"
 
 VALIDATION_DISTRACTOR_GROUPS: dict[str, tuple[tuple[str, str], ...]] = {
