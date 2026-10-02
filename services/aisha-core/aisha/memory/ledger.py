@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import closing
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -164,7 +165,7 @@ class ExperienceLedger:
         """
         def work() -> dict:
             issues: list[dict] = []
-            with self.store._connect() as db:
+            with closing(self.store._connect()) as db:
                 sqlite_integrity = [
                     str(row[0])
                     for row in db.execute("PRAGMA integrity_check").fetchall()
