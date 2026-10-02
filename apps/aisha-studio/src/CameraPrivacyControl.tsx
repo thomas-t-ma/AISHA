@@ -27,8 +27,16 @@ export default function CameraPrivacyControl({
       </div>
 
       <div className="camera-privacy-facts">
-        <span>Raw pixels in Core <strong>no</strong></span>
+        <span>Pixels in semantic state <strong>no</strong></span>
         <span>Capture persisted <strong>no</strong></span>
+        <span>
+          Raw-frame scope
+          <strong>
+            {status?.privacy.raw_frame_scope === 'ephemeral-provider-memory'
+              ? 'ephemeral'
+              : 'none'}
+          </strong>
+        </span>
       </div>
 
       <button
