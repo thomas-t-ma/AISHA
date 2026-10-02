@@ -169,6 +169,13 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert latest.status_code == 200
         assert latest.json() is None
 
+        summary = client.get("/v1/perception/summary")
+        assert summary.status_code == 200
+        assert summary.json()["person_present"] is False
+        assert summary.json()["person_count"] == 0
+        assert summary.json()["gaze_toward_camera"] is False
+        assert summary.json()["observation_kinds"] == []
+
         health = client.get("/v1/health")
         assert health.status_code == 200
         assert health.json()["embodiment"]["activity"] == "idle"
