@@ -463,3 +463,88 @@ button:disabled { cursor: not-allowed; opacity: .44; }
   .embodiment-preview.compact .embodiment-compact-copy { display: none; }
   .embodiment-preview.compact { padding: 4px; border: 0; background: transparent; }
 }
+
+
+/* Affect is layered on top of activity rather than replacing it. */
+.affect-warm .embodiment-mouth span {
+  width: 23px; height: 6px; border-radius: 0 0 60% 60%;
+  background: transparent; border-bottom: 2px solid #d4b7cfcc;
+}
+.affect-warm .embodiment-brow { transform: translateY(-1px); }
+
+.affect-amused .embodiment-mouth span {
+  width: 26px; height: 8px; border-radius: 0 0 70% 70%;
+  background: transparent; border-bottom: 2px solid #dfbdd7dd;
+}
+.affect-amused .brow-left { transform: rotate(-5deg) translateY(-2px); }
+.affect-amused .brow-right { transform: rotate(2deg) translateY(-1px); }
+
+.affect-curious .brow-left { transform: rotate(-9deg) translateY(-3px); }
+.affect-curious .brow-right { transform: rotate(3deg) translateY(1px); }
+.affect-curious .eye-left i { transform: translate(1px,-1px); }
+
+.affect-concerned .brow-left { transform: rotate(8deg) translateY(1px); }
+.affect-concerned .brow-right { transform: rotate(-8deg) translateY(1px); }
+.affect-concerned .embodiment-mouth span {
+  width: 20px; transform: rotate(-2deg);
+}
+
+.affect-surprised .embodiment-eye {
+  height: 15px;
+}
+.affect-surprised .embodiment-eye i {
+  width: 8px; height: 8px;
+}
+.affect-surprised .embodiment-mouth span {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #cdb9dc66;
+}
+
+/* Activity-specific motion still wins where motion is necessary. */
+.activity-speaking.affect-warm .embodiment-mouth span,
+.activity-speaking.affect-amused .embodiment-mouth span,
+.activity-speaking.affect-concerned .embodiment-mouth span,
+.activity-speaking.affect-surprised .embodiment-mouth span {
+  border: 0;
+  background: #cdb9dc77;
+  animation: embodiment-speak .42s ease-in-out infinite alternate;
+}
+
+.affect-controls {
+  width: min(100%, 520px);
+  margin: -3px 0 24px;
+  padding: 12px 14px;
+  border: 1px solid #342e46;
+  border-radius: 12px;
+  background: #181522a8;
+}
+.affect-control-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 9px;
+}
+.affect-control-head > span:last-child {
+  color: #9c92ae; font-size: 9px; text-transform: capitalize;
+}
+.affect-buttons {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
+}
+.affect-buttons button {
+  border: 1px solid #40384f; border-radius: 999px;
+  padding: 6px 9px; background: #211c2d; color: #9e95af;
+  font-size: 9px; text-transform: capitalize;
+}
+.affect-buttons button:hover:not(:disabled) { background: #2e263d; color: #ddd3eb; }
+.affect-buttons button.selected {
+  border-color: #8f76ad; background: #352a45; color: #eee3fb;
+}
+.affect-intensity {
+  display: grid; grid-template-columns: 62px 1fr; align-items: center;
+  gap: 10px; margin-top: 10px;
+}
+.affect-intensity span { color: #8d849f; font-size: 9px; }
+.affect-intensity input { width: 100%; accent-color: #a88bd0; }
+
+@media (max-width: 560px) {
+  .affect-controls { padding: 10px; }
+  .affect-buttons button { padding: 5px 7px; }
+}
