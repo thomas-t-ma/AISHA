@@ -27,10 +27,6 @@ export function toRendererInput(
     activityIntensity: state.intensity,
     affect: state.affect,
     affectIntensity: state.affect_intensity,
-    attentionTarget: (
-      perception?.person_present && perception.gaze_toward_camera
-        ? 'viewer'
-        : 'ambient'
-    ),
+    attentionTarget: perception?.person_present ? 'viewer' : 'ambient',
   };
 }
