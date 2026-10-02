@@ -17,6 +17,8 @@ class VisionAnalyzer(Protocol):
 
     def status(self) -> dict[str, Any]: ...
 
+    def close(self) -> None: ...
+
 
 class DisabledVisionAnalyzer:
     name = "disabled-analyzer"
@@ -32,6 +34,9 @@ class DisabledVisionAnalyzer:
             "enabled": False,
             "analyzer": self.name,
         }
+
+    def close(self) -> None:
+        return None
 
 
 class MockVisionAnalyzer:
@@ -70,3 +75,6 @@ class MockVisionAnalyzer:
             "analyzer": self.name,
             "queued_batches": len(self._batches),
         }
+
+    def close(self) -> None:
+        return None
