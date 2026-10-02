@@ -126,6 +126,8 @@ async def lifespan(app: FastAPI):
         perception_hub,
     )
 
+    perception_runtime.start()
+
     app.state.aisha = {
         "settings": settings,
         "profile": profile,
@@ -140,8 +142,11 @@ async def lifespan(app: FastAPI):
         "memory_integrity_startup": memory_integrity_startup,
         "warmup_metrics": warmup_metrics,
     }
-    yield
-    await orchestrator.stop_reflections()
+    try:
+        yield
+    finally:
+        await perception_runtime.stop()
+        await orchestrator.stop_reflections()
 
 
 app = FastAPI(title="AISHA Core", version="0.2.0", lifespan=lifespan)
