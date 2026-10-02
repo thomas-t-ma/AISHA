@@ -92,6 +92,11 @@ async def test_perception_hub_tracks_latest_structured_frame():
     assert hub.latest() is not None
     assert hub.latest().frame_id == first.frame_id
     assert hub.status()["frames_seen"] == 1
+    first_summary = hub.summary()
+    assert first_summary.person_present is True
+    assert first_summary.person_count == 1
+    assert first_summary.gaze_toward_camera is False
+    assert first_summary.observation_kinds == ["person"]
 
     await hub.poll_once()
     latest = hub.latest()
@@ -99,10 +104,19 @@ async def test_perception_hub_tracks_latest_structured_frame():
     assert latest.frame_id == second.frame_id
     assert hub.status()["frames_seen"] == 2
     assert hub.status()["observation_count"] == 1
+    second_summary = hub.summary()
+    assert second_summary.person_present is False
+    assert second_summary.gaze_toward_camera is True
+    assert second_summary.observation_kinds == ["gaze"]
 
     hub.clear()
     assert hub.latest() is None
     assert hub.status()["observation_count"] == 0
+    empty_summary = hub.summary()
+    assert empty_summary.person_present is False
+    assert empty_summary.person_count == 0
+    assert empty_summary.gaze_toward_camera is False
+    assert empty_summary.observation_kinds == []
 
 
 
@@ -148,3 +162,24 @@ def test_camera_descriptor_excludes_raw_pixels():
     assert "bytes" not in fields
     assert "pixels" not in fields
     assert "frame_ref" in fields
+
+
+
+@pytest.mark.asyncio
+async def test_perception_summary_ignores_low_confidence_observations():
+    frame = VisionFrame(
+        source_id="camera_front",
+        observations=[
+            VisionObservation(kind="person", confidence=0.49, label="person"),
+            VisionObservation(kind="gaze", confidence=0.95, label="away"),
+            VisionObservation(kind="gaze", confidence=0.51, label="toward_camera"),
+        ],
+    )
+    hub = PerceptionHub(MockVisionProvider([frame]))
+    await hub.poll_once()
+
+    summary = hub.summary()
+    assert summary.person_present is False
+    assert summary.person_count == 0
+    assert summary.gaze_toward_camera is True
+    assert summary.observation_kinds == ["gaze"]
