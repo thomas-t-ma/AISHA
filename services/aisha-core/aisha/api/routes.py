@@ -169,6 +169,11 @@ async def session_model_runs(
 ):
     return await request.app.state.aisha["store"].session_model_runs(session_id, limit=limit)
 
+@router.get("/embodiment/state")
+async def embodiment_state(request: Request):
+    return request.app.state.aisha["orchestrator"].embodiment_status()
+
+
 @router.get("/memory/status")
 async def automatic_memory_status(request: Request):
     return request.app.state.aisha["orchestrator"].memory_status()
