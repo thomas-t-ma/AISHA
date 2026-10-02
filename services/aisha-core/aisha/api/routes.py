@@ -65,6 +65,7 @@ async def health(request: Request):
         "persona_version": state["persona"].version,
         "data_dir": str(state["settings"].data_dir),
         "warmup": state.get("warmup_metrics", {}),
+        "memory_integrity": state.get("memory_integrity_startup", {}),
         "auto_memory": state["orchestrator"].memory_status(),
     }
 
@@ -171,6 +172,11 @@ async def session_model_runs(
 @router.get("/memory/status")
 async def automatic_memory_status(request: Request):
     return request.app.state.aisha["orchestrator"].memory_status()
+
+
+@router.get("/memory/integrity")
+async def memory_integrity(request: Request):
+    return await request.app.state.aisha["ledger"].audit_integrity()
 
 
 @router.get("/memory/episodes")
