@@ -110,18 +110,8 @@ async def lifespan(app: FastAPI):
         store, persona, provider, ledger=ledger, reflector=reflector,
         evidence_verifier=evidence_verifier, semantic_retriever=semantic_retriever,
     )
-    perception_hub = PerceptionHub(DisabledVisionProvider())
-    camera_controller = CameraController(
-        DisabledCameraSource(),
-        on_disable=perception_hub.clear,
-    )
-    perception_runtime = PerceptionRuntime(
-        camera_controller,
-        DisabledVisionAnalyzer(),
-        perception_hub,
-    )
-
-    perception_runtime.start()
+    perception = build_perception_components(settings, profile)
+    perception.runtime.start()
 
     app.state.aisha = {
         "settings": settings,
