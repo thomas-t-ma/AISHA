@@ -213,6 +213,11 @@ async def perception_latest(request: Request):
     return None if frame is None else frame.model_dump(mode="json")
 
 
+@router.get("/perception/summary")
+async def perception_summary(request: Request):
+    return request.app.state.aisha["perception_hub"].summary().model_dump(mode="json")
+
+
 @router.get("/perception/camera")
 async def perception_camera_status(request: Request):
     return request.app.state.aisha["camera_controller"].status()
