@@ -59,8 +59,9 @@ class CameraController:
             ),
             "privacy": {
                 "camera_active": bool(source_status.get("enabled", False)),
-                "raw_pixels_in_core": False,
+                "raw_pixels_in_semantic_state": False,
                 "capture_persisted": False,
+                "raw_frame_scope": source_status.get("raw_frame_scope", "none"),
             },
             "checked_at": datetime.now(UTC).isoformat(),
         }
