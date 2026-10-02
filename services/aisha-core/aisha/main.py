@@ -114,7 +114,10 @@ async def lifespan(app: FastAPI):
         evidence_verifier=evidence_verifier, semantic_retriever=semantic_retriever,
     )
     perception_hub = PerceptionHub(DisabledVisionProvider())
-    camera_controller = CameraController(DisabledCameraSource())
+    camera_controller = CameraController(
+        DisabledCameraSource(),
+        on_disable=perception_hub.clear,
+    )
 
     app.state.aisha = {
         "settings": settings,
