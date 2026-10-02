@@ -148,6 +148,19 @@ Use another runtime profile when needed:
 The default is `mock`, which is preferred for UI, embodiment, and deterministic
 development that does not require a local LLM.
 
+Local camera perception is opt-in:
+
+```powershell
+.\Start-AISHA.ps1 -Vision
+```
+
+On first use, the launcher installs the optional OpenCV/MediaPipe dependencies
+and downloads the Face Landmarker model into AISHA's local data directory. The
+camera still starts **off** and must be enabled explicitly in Studio. Captured
+frames may exist briefly in a bounded provider-local memory buffer while they
+are analyzed; raw pixels never enter AISHA's semantic perception state, events,
+memory, or SQLite, and captures are not persisted.
+
 ## Moving between machines
 
 GitHub is the source of truth for AISHA code.
