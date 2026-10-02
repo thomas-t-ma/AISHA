@@ -75,8 +75,10 @@ not directly control facial blendshapes.
 
 ## Perception
 
-AISHA Core does not own camera pixels. A vision backend converts frames into a
-`VisionFrame` containing structured `VisionObservation` records.
+AISHA's semantic perception layer does not contain camera pixels. A local
+capture/analyzer backend may hold a raw frame briefly in bounded provider-local
+memory while converting it into a `VisionFrame` containing structured
+`VisionObservation` records.
 
 Example observations:
 
@@ -102,8 +104,10 @@ Current flow:
         -> latest structured scene state
         -> future cognition policy
 
-`PerceptionHub` currently retains only the latest structured frame in memory.
-Core starts with a disabled provider. No camera is opened and no visual data is
+`PerceptionHub` retains only the latest structured frame in memory. The default
+runtime starts with vision disabled. On Windows, `Start-AISHA.ps1 -Vision`
+selects the optional OpenCV + MediaPipe backend, but the physical camera still
+starts off and must be enabled explicitly in Studio. Visual captures are never
 persisted.
 
 Developer endpoints:
@@ -125,20 +129,29 @@ The eventual workstation can independently choose:
 AISHA Core only depends on the contracts. The same tests therefore run with mock
 providers on Windows, macOS, Linux, or CI.
 
-## Likely future milestones
+## Next milestones
 
-1. Browser/Studio expression-state preview.
-2. Renderer client that subscribes to embodiment events.
-3. Camera-source abstraction with explicit user enable/disable.
-4. Local person/face/pose provider.
-5. Gaze and gesture observations.
-6. Perception-to-cognition policy deciding which observations are relevant enough
-   to mention or use.
-7. Optional automatic affect planner using the existing bounded affect channel.
-8. Unity or other full avatar renderer.
+The browser embodiment preview, renderer contract, explicit camera lifecycle,
+structured perception runtime, and first local face backend are now scaffolded.
+
+Next:
+
+1. Calibrate observable head/eye geometry into a conservative viewer-attention
+   signal; do not infer emotion or mental state.
+2. Add optional local person/object detection when useful, likely through a
+   GPU-capable ONNX Runtime backend.
+3. Add perception-to-cognition policy deciding which observations are relevant
+   enough to influence a response.
+4. Add gesture/pose observations where they materially improve interaction.
+5. Add optional automatic affect planning using the existing bounded affect
+   channel.
+6. Replace the CSS development face with a full avatar renderer when the semantic
+   interface is stable.
 
 Camera and screen observations should remain local by default, bounded in
-retention, and explicit about when they are active.
+retention, and explicit about when they are active. Current local camera frames
+are ephemeral provider memory only; raw pixels never enter semantic state,
+events, long-term memory, or SQLite.
 
 
 ### Camera and analysis privacy boundary
@@ -159,9 +172,12 @@ visibly, and camera enable/disable is restricted to the local Studio origin.
 Disabling the camera clears both the latest capture reference and the latest
 structured perception state.
 
-The current development runtime uses `DisabledCameraSource` and
-`DisabledVisionAnalyzer`, so no physical camera is opened. CI exercises the
-same lifecycle with `MockCameraSource` and `MockVisionAnalyzer`.
+The default development runtime uses `DisabledCameraSource` and
+`DisabledVisionAnalyzer`, so no physical camera is opened. The optional local
+backend uses OpenCV capture and MediaPipe Face Landmarker. Raw frames are kept
+only in a small bounded `EphemeralFrameStore`, removed when consumed, and
+cleared when the camera is disabled. CI exercises the lifecycle with mocks and
+hardware-free fake OpenCV/MediaPipe results.
 
 AISHA also exposes an observable-only `PerceptionSummary` containing:
 
