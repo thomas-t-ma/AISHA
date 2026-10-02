@@ -37,13 +37,22 @@ A future renderer owns the visual interpretation:
 This separation means a renderer can move from a browser prototype to Unity or
 another engine without changing AISHA cognition.
 
-### Future affect layer
+### Affect layer
 
-Emotion/content-aware expressions should be a separate layer from lifecycle state.
-For example, a future response planner could add a bounded affect intent such as
-warm, amused, concerned, or surprised. The renderer would blend affect with the
-lifecycle state. That work should not make raw model prose directly control facial
-blendshapes.
+Affect is now a separate semantic channel from lifecycle activity. Current affect
+intents are neutral, warm, amused, curious, concerned, and surprised, each with a
+bounded intensity from 0 to 1.
+
+For example:
+
+    activity = speaking
+    affect = amused
+    affect_intensity = 0.35
+
+The renderer blends activity and affect rather than replacing one with the other.
+Studio exposes a local developer control for exercising these combinations without
+an LLM. Automatic affect inference is intentionally deferred; raw model prose must
+not directly control facial blendshapes.
 
 ## Perception
 
@@ -106,7 +115,7 @@ providers on Windows, macOS, Linux, or CI.
 5. Gaze and gesture observations.
 6. Perception-to-cognition policy deciding which observations are relevant enough
    to mention or use.
-7. Optional affect planner, separate from basic speaking/thinking lifecycle.
+7. Optional automatic affect planner using the existing bounded affect channel.
 8. Unity or other full avatar renderer.
 
 Camera and screen observations should remain local by default, bounded in
