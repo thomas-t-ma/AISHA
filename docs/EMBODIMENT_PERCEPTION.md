@@ -139,3 +139,37 @@ providers on Windows, macOS, Linux, or CI.
 
 Camera and screen observations should remain local by default, bounded in
 retention, and explicit about when they are active.
+
+
+### Camera and analysis privacy boundary
+
+The camera path is now explicitly split into three layers:
+
+    CameraSource
+        -> CameraFrameDescriptor
+        -> VisionAnalyzer
+        -> VisionFrame / VisionObservation
+        -> PerceptionHub
+
+`CameraFrameDescriptor` contains only an opaque provider-local frame reference,
+source ID, capture time, and optional dimensions. It does not contain image bytes.
+
+The camera controller defaults to off. Studio exposes the current camera state
+visibly, and camera enable/disable is restricted to the local Studio origin.
+Disabling the camera clears both the latest capture reference and the latest
+structured perception state.
+
+The current development runtime uses `DisabledCameraSource` and
+`DisabledVisionAnalyzer`, so no physical camera is opened. CI exercises the
+same lifecycle with `MockCameraSource` and `MockVisionAnalyzer`.
+
+AISHA also exposes an observable-only `PerceptionSummary` containing:
+
+- person presence and count;
+- whether a reliable gaze observation is labeled `toward_camera`;
+- observed object kinds;
+- source/frame metadata.
+
+The summary intentionally does not infer facial emotion, identity, demographic
+attributes, health state, or other unobserved internal traits.
+
