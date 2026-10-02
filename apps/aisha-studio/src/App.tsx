@@ -399,7 +399,11 @@ export default function App() {
       const next = await setCameraEnabled(enabled);
       setCameraStatus(next);
       if (!next.enabled) setPerceptionSummary(null);
-      setNotice('');
+      if (enabled && !next.enabled) {
+        setNotice(next.last_error ?? 'The camera could not be opened.');
+      } else {
+        setNotice('');
+      }
     } catch {
       setNotice('Could not change camera privacy state.');
     } finally {
