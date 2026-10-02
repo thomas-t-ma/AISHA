@@ -1,4 +1,4 @@
-import type { AISHAEvent, AutomaticMemoryStatus, BeliefVersion, CameraStatus, EmbodimentState, LearnedBelief, MemoryRecord, ModelRun, RuntimeHealth, StoredMessage } from './types';
+import type { AISHAEvent, AutomaticMemoryStatus, BeliefVersion, CameraStatus, EmbodimentState, LearnedBelief, MemoryRecord, ModelRun, PerceptionSummary, RuntimeHealth, StoredMessage } from './types';
 
 async function json<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -16,6 +16,10 @@ export function getEmbodimentState(): Promise<EmbodimentState> {
 
 export function getCameraStatus(): Promise<CameraStatus> {
   return json<CameraStatus>('/v1/perception/camera');
+}
+
+export function getPerceptionSummary(): Promise<PerceptionSummary> {
+  return json<PerceptionSummary>('/v1/perception/summary');
 }
 
 export function setCameraEnabled(enabled: boolean): Promise<CameraStatus> {
