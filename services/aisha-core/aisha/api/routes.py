@@ -65,6 +65,8 @@ async def health(request: Request):
         "persona_version": state["persona"].version,
         "data_dir": str(state["settings"].data_dir),
         "warmup": state.get("warmup_metrics", {}),
+        "embodiment": state["orchestrator"].embodiment_status(),
+        "perception": state["perception_hub"].status(),
         "memory_integrity": state.get("memory_integrity_startup", {}),
         "auto_memory": state["orchestrator"].memory_status(),
     }
