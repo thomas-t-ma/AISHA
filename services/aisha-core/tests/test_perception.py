@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from aisha.perception.analyzer import MockVisionAnalyzer
@@ -233,3 +235,31 @@ async def test_perception_runtime_requires_camera_enablement_and_emits_structure
     controller.disable()
     assert hub.latest() is None
     assert hub.summary().person_present is False
+
+
+
+@pytest.mark.asyncio
+async def test_perception_runtime_start_and_stop_are_idempotent():
+    source = MockCameraSource()
+    hub = PerceptionHub(DisabledVisionProvider())
+    controller = CameraController(source, on_disable=hub.clear)
+    runtime = PerceptionRuntime(
+        controller,
+        MockVisionAnalyzer(),
+        hub,
+        poll_interval_seconds=0.05,
+    )
+
+    assert runtime.status()["running"] is False
+    runtime.start()
+    first_task = runtime._task
+    runtime.start()
+    assert runtime._task is first_task
+    assert runtime.status()["running"] is True
+
+    await asyncio.sleep(0)
+    await runtime.stop()
+    assert runtime.status()["running"] is False
+
+    await runtime.stop()
+    assert runtime.status()["running"] is False
