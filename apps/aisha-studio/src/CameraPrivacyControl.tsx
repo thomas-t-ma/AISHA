@@ -1,13 +1,15 @@
-import type { CameraStatus } from './types';
+import type { CameraStatus, PerceptionSummary } from './types';
 
 interface CameraPrivacyControlProps {
   status: CameraStatus | null;
+  perception?: PerceptionSummary | null;
   disabled?: boolean;
   onToggle: (enabled: boolean) => void;
 }
 
 export default function CameraPrivacyControl({
   status,
+  perception = null,
   disabled = false,
   onToggle,
 }: CameraPrivacyControlProps) {
@@ -36,6 +38,10 @@ export default function CameraPrivacyControl({
               ? 'ephemeral'
               : 'none'}
           </strong>
+        </span>
+        <span>
+          People visible
+          <strong>{enabled ? (perception?.person_count ?? 0) : 0}</strong>
         </span>
       </div>
 
