@@ -147,8 +147,9 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert camera.json()["available"] is False
         assert camera.json()["enabled"] is False
         assert camera.json()["privacy"]["camera_active"] is False
-        assert camera.json()["privacy"]["raw_pixels_in_core"] is False
+        assert camera.json()["privacy"]["raw_pixels_in_semantic_state"] is False
         assert camera.json()["privacy"]["capture_persisted"] is False
+        assert camera.json()["privacy"]["raw_frame_scope"] == "none"
 
         enable_camera = client.post(
             "/v1/perception/camera",
