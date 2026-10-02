@@ -142,6 +142,29 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert perception.json()["provider"] == "disabled"
         assert perception.json()["observation_count"] == 0
 
+        camera = client.get("/v1/perception/camera")
+        assert camera.status_code == 200
+        assert camera.json()["available"] is False
+        assert camera.json()["enabled"] is False
+        assert camera.json()["privacy"]["camera_active"] is False
+        assert camera.json()["privacy"]["raw_pixels_in_core"] is False
+        assert camera.json()["privacy"]["capture_persisted"] is False
+
+        enable_camera = client.post(
+            "/v1/perception/camera",
+            json={"enabled": True},
+            headers={"origin": "http://127.0.0.1:5173"},
+        )
+        assert enable_camera.status_code == 200
+        assert enable_camera.json()["enabled"] is False
+
+        rejected_camera = client.post(
+            "/v1/perception/camera",
+            json={"enabled": True},
+            headers={"origin": "https://unrelated.example"},
+        )
+        assert rejected_camera.status_code == 403
+
         latest = client.get("/v1/perception/latest")
         assert latest.status_code == 200
         assert latest.json() is None
@@ -151,3 +174,5 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert health.json()["embodiment"]["activity"] == "idle"
         assert health.json()["embodiment"]["affect"] == "amused"
         assert health.json()["perception"]["enabled"] is False
+        assert health.json()["perception"]["camera"]["enabled"] is False
+        assert health.json()["perception"]["camera"]["privacy"]["camera_active"] is False
