@@ -195,6 +195,36 @@ AISHA Core also runs the same audit at startup. The startup snapshot appears in
 intended to be run before and after copying AISHA's local database between
 machines.
 
+## Portable AISHA state snapshots
+
+AISHA's local SQLite state can be moved between machines as a verified snapshot
+bundle. Snapshot creation uses SQLite's backup API, refuses a memory ledger that
+fails integrity checks, records a SHA-256 checksum, and stores a small manifest
+next to the database inside one zip file.
+
+Create a snapshot from `services/aisha-core`:
+
+```powershell
+python scripts\snapshot_aisha_state.py --output .\aisha-state.zip
+```
+
+Verify a copied bundle before restoring it:
+
+```powershell
+python scripts\snapshot_aisha_state.py --verify .\aisha-state.zip
+```
+
+With AISHA Core stopped, restore it on another machine:
+
+```powershell
+python scripts\restore_aisha_state.py .\aisha-state.zip
+```
+
+If a target database already exists, restore first creates a timestamped
+`pre-restore` SQLite backup. The restored database is audited again before the
+command reports success. Model weights, virtual environments, `.env`, and other
+machine-specific runtime files are intentionally not part of this bundle.
+
 ## Autonomous memory v1 (experimental)
 
 Voice is still on a separate branch; this branch builds on the text-only Studio.
