@@ -82,7 +82,11 @@ class EmbodimentDirector:
         *,
         intensity: float = 0.5,
     ) -> EmbodimentState:
-        normalized_intensity = 0.0 if affect == "neutral" else intensity
+        normalized_intensity = (
+            0.0
+            if affect == "neutral"
+            else max(0.0, min(1.0, intensity))
+        )
         if (
             affect == self._state.affect
             and normalized_intensity == self._state.affect_intensity
