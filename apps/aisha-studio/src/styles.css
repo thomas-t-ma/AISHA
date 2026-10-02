@@ -367,6 +367,13 @@ button:disabled { cursor: not-allowed; opacity: .44; }
   background: linear-gradient(155deg, #393048, #1d192a 72%);
   box-shadow: inset 0 8px 22px #bca2e30c, 0 12px 34px #05030a55;
   overflow: hidden;
+  transform:
+    translate(var(--head-x, 0), var(--head-y, 0))
+    rotate(var(--head-tilt, 0deg));
+  transition:
+    transform 1.8s cubic-bezier(.22,.8,.28,1),
+    border-color .32s ease,
+    background .32s ease;
 }
 .embodiment-head::before {
   content: ''; position: absolute; left: 18%; right: 18%; top: 8%; height: 20%;
@@ -381,12 +388,23 @@ button:disabled { cursor: not-allowed; opacity: .44; }
   width: 22px; height: 12px; border-radius: 60%;
   background: #cfc0e92b; border: 1px solid #9b88bb55;
   overflow: hidden;
-  animation: embodiment-blink 6.4s infinite;
+  transform-origin: center;
+  transition: height .16s ease, transform .08s ease;
 }
 .embodiment-eye i {
   display: block; width: 6px; height: 6px; border-radius: 50%;
   background: #eaddff; box-shadow: 0 0 9px #cfa8ff;
-  transition: transform .28s ease, width .28s ease, height .28s ease;
+  transform: translate(var(--gaze-x, 0), var(--gaze-y, 0));
+  transition:
+    transform .22s cubic-bezier(.2,.75,.3,1),
+    width .28s ease,
+    height .28s ease;
+}
+.is-blinking .embodiment-eye {
+  transform: scaleY(.08);
+}
+.is-blinking .embodiment-eye i {
+  opacity: .15;
 }
 .embodiment-brow {
   position: absolute; top: 31%; width: 24%; height: 1px;
@@ -422,7 +440,6 @@ button:disabled { cursor: not-allowed; opacity: .44; }
   box-shadow: 0 0 76px #aa7ce845, inset 0 0 38px #c9a4ff14;
   animation-duration: 2.4s;
 }
-.activity-thinking .embodiment-eye i { transform: translate(2px,-2px); }
 .activity-thinking .brow-left { transform: rotate(-5deg) translateY(-1px); }
 .activity-thinking .brow-right { transform: rotate(5deg) translateY(-1px); }
 
@@ -449,10 +466,6 @@ button:disabled { cursor: not-allowed; opacity: .44; }
 @keyframes embodiment-breathe {
   0%,100% { transform: scale(.97); opacity: .78; }
   50% { transform: scale(1.02); opacity: 1; }
-}
-@keyframes embodiment-blink {
-  0%,45%,48%,100% { transform: scaleY(1); }
-  46%,47% { transform: scaleY(.08); }
 }
 @keyframes embodiment-speak {
   from { transform: scaleY(.55); width: 20px; }
@@ -481,8 +494,6 @@ button:disabled { cursor: not-allowed; opacity: .44; }
 
 .affect-curious .brow-left { transform: rotate(-9deg) translateY(-3px); }
 .affect-curious .brow-right { transform: rotate(3deg) translateY(1px); }
-.affect-curious .eye-left i { transform: translate(1px,-1px); }
-
 .affect-concerned .brow-left { transform: rotate(8deg) translateY(1px); }
 .affect-concerned .brow-right { transform: rotate(-8deg) translateY(1px); }
 .affect-concerned .embodiment-mouth span {
@@ -547,4 +558,37 @@ button:disabled { cursor: not-allowed; opacity: .44; }
 @media (max-width: 560px) {
   .affect-controls { padding: 10px; }
   .affect-buttons button { padding: 5px 7px; }
+}
+
+
+/* Renderer-local procedural life: intentionally never persisted to Core. */
+.embodiment-stage {
+  transform: translateZ(0);
+}
+.embodiment-preview:not(.compact) .embodiment-head {
+  animation: embodiment-presence 9s ease-in-out infinite;
+}
+.activity-thinking .embodiment-head {
+  animation-duration: 7.2s;
+}
+.activity-speaking .embodiment-head {
+  animation-duration: 5.8s;
+}
+
+@keyframes embodiment-presence {
+  0%,100% {
+    filter: brightness(.98);
+  }
+  50% {
+    filter: brightness(1.035);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .embodiment-head {
+    transform: none !important;
+  }
+  .embodiment-eye i {
+    transform: none !important;
+  }
 }
