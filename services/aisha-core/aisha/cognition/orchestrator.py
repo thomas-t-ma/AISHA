@@ -9,7 +9,7 @@ from time import perf_counter
 from aisha.character.loader import PersonaPackage
 from aisha.contracts.events import AISHAEvent
 from aisha.contracts.turns import Message, TurnContext
-from aisha.embodiment.state import EmbodimentDirector
+from aisha.embodiment.state import AffectIntent, EmbodimentDirector
 from aisha.memory.evidence import OllamaEvidenceVerifier
 from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.quotes import original_source_quote
@@ -65,6 +65,18 @@ class AISHAOrchestrator:
 
     def embodiment_status(self) -> dict:
         return self.embodiment_director.snapshot().model_dump(mode="json")
+
+    def set_embodiment_affect(
+        self,
+        affect: AffectIntent,
+        *,
+        intensity: float = 0.5,
+    ) -> dict:
+        state = self.embodiment_director.set_affect(
+            affect,
+            intensity=intensity,
+        )
+        return state.model_dump(mode="json")
 
     async def _embodiment_event(
         self,
