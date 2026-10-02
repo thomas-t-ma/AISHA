@@ -5,7 +5,7 @@ compute:
   vram_gb: 16
 llm:
   provider: ollama
-  model: qwen3.5:35b-mlx
+  model: qwen3.5:35b
   base_url: http://127.0.0.1:11434
   api_key_env: null
   think: false
@@ -37,7 +37,8 @@ vision:
   provider: disabled
 notes: >-
   AISHA development profile for the Windows RTX 5080 workstation. Memory and
-  model settings intentionally match the frozen v10.2 validation configuration
-  used on the M2 Max so cross-machine regression results remain comparable.
+  memory settings intentionally match the frozen v10.2 validation configuration
+  used on the M2 Max. The gate uses the non-MLX qwen3.5:35b Ollama build required
+  for Windows/NVIDIA rather than the Apple-specific -mlx artifact.
   Ollama remains external to Git; model weights and machine-local state are not
   committed.
