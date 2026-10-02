@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from pathlib import Path
 
 import httpx
-from pathlib import Path
 
 from aisha.memory.pipeline_benchmark import run_pipeline_case, summarize_pipeline_results
 from aisha.memory.relevance import (
@@ -22,7 +22,6 @@ from aisha.memory.validation_benchmark import (
     validation_cases,
 )
 from aisha.settings import Settings
-
 
 ALLOWED_PROFILES = {"mac-m2max-96gb", "nvidia-5080"}
 FROZEN_GATE_MODELS = {
