@@ -165,6 +165,33 @@ class ExperienceLedger:
         def work() -> dict:
             issues: list[dict] = []
             with self.store._connect() as db:
+                required_tables = {
+                    "auto_episodes",
+                    "auto_beliefs",
+                    "auto_belief_versions",
+                }
+                present_tables = {
+                    str(row["name"])
+                    for row in db.execute(
+                        "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    ).fetchall()
+                }
+                missing_tables = sorted(required_tables - present_tables)
+                if missing_tables:
+                    return {
+                        "ok": False,
+                        "episodes": 0,
+                        "beliefs": 0,
+                        "versions": 0,
+                        "issue_count": 1,
+                        "issues": [
+                            {
+                                "code": "missing_memory_schema",
+                                "tables": missing_tables,
+                            }
+                        ],
+                    }
+
                 counts = {
                     "episodes": int(
                         db.execute("SELECT COUNT(*) FROM auto_episodes").fetchone()[0]
