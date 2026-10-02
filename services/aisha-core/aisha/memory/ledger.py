@@ -165,6 +165,18 @@ class ExperienceLedger:
         def work() -> dict:
             issues: list[dict] = []
             with self.store._connect() as db:
+                sqlite_integrity = [
+                    str(row[0])
+                    for row in db.execute("PRAGMA integrity_check").fetchall()
+                ]
+                if sqlite_integrity != ["ok"]:
+                    issues.append(
+                        {
+                            "code": "sqlite_integrity_check_failed",
+                            "details": sqlite_integrity[:20],
+                        }
+                    )
+
                 required_tables = {
                     "auto_episodes",
                     "auto_beliefs",
