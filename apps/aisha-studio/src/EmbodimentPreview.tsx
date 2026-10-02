@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 
+import { toRendererInput } from './renderer';
 import type { EmbodimentState } from './types';
 
 interface EmbodimentPreviewProps {
@@ -39,6 +40,7 @@ export default function EmbodimentPreview({
   state,
   compact = false,
 }: EmbodimentPreviewProps) {
+  const renderer = toRendererInput(state);
   const [blinking, setBlinking] = useState(false);
   const [gaze, setGaze] = useState<Point>({ x: 0, y: 0 });
   const [head, setHead] = useState<HeadPose>({ x: 0, y: 0, tilt: 0 });
@@ -83,7 +85,7 @@ export default function EmbodimentPreview({
 
     let gazeTimer: number | undefined;
     let cancelled = false;
-    const bias = gazeBias(state.activity);
+    const bias = gazeBias(renderer.activity);
     const amplitude = compact ? 1.25 : 2.15;
 
     const scheduleGaze = () => {
@@ -103,7 +105,7 @@ export default function EmbodimentPreview({
       cancelled = true;
       if (gazeTimer !== undefined) window.clearTimeout(gazeTimer);
     };
-  }, [compact, state.activity]);
+  }, [compact, renderer.activity]);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -146,20 +148,20 @@ export default function EmbodimentPreview({
   return (
     <div
       className={
-        'embodiment-preview activity-' + state.activity
-        + ' expression-' + state.expression
-        + ' affect-' + state.affect
+        'embodiment-preview activity-' + renderer.activity
+        + ' expression-' + renderer.activityIntent
+        + ' affect-' + renderer.affect
         + (blinking ? ' is-blinking' : '')
         + (compact ? ' compact' : '')
       }
       style={proceduralStyle}
-      aria-label={'AISHA is ' + state.activity}
+      aria-label={'AISHA is ' + renderer.activity}
       title={
-        'Embodiment state: ' + state.activity
-        + ' / ' + state.expression
-        + ' · affect ' + state.affect
-        + ' ' + state.affect_intensity.toFixed(2)
-        + ' · activity intensity ' + state.intensity.toFixed(2)
+        'Embodiment state: ' + renderer.activity
+        + ' / ' + renderer.activityIntent
+        + ' · affect ' + renderer.affect
+        + ' ' + renderer.affectIntensity.toFixed(2)
+        + ' · activity intensity ' + renderer.activityIntensity.toFixed(2)
       }
     >
       <div className="embodiment-stage" aria-hidden="true">
@@ -178,17 +180,17 @@ export default function EmbodimentPreview({
       {!compact && (
         <div className="embodiment-copy">
           <span className="eyebrow">EMBODIMENT PREVIEW</span>
-          <strong>{LABELS[state.activity]}</strong>
+          <strong>{LABELS[renderer.activity]}</strong>
           <small>
-            {state.expression} · {Math.round(state.intensity * 100)}% activity
-            {' · '}{state.affect} · {Math.round(state.affect_intensity * 100)}% affect
+            {renderer.activityIntent} · {Math.round(renderer.activityIntensity * 100)}% activity
+            {' · '}{renderer.affect} · {Math.round(renderer.affectIntensity * 100)}% affect
           </small>
         </div>
       )}
       {compact && (
         <div className="embodiment-compact-copy">
-          <strong>{LABELS[state.activity]}</strong>
-          <span>{state.expression} · {state.affect}</span>
+          <strong>{LABELS[renderer.activity]}</strong>
+          <span>{renderer.activityIntent} · {renderer.affect}</span>
         </div>
       )}
     </div>
