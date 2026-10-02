@@ -1,0 +1,113 @@
+# AISHA embodiment and perception architecture
+
+This layer is deliberately hardware- and renderer-independent. The goal is to let
+AISHA gain a visible body and local perception without making cognition depend on
+Unity, Three.js, Live2D, OpenCV, CUDA, MLX, or any particular vision model.
+
+## Embodiment
+
+AISHA Core emits **semantic embodiment intent**:
+
+- `idle / neutral`
+- `listening / attentive`
+- `thinking / focused`
+- `speaking / engaged`
+
+The first implementation is deterministic and tied only to conversation lifecycle.
+It does **not** ask an LLM to choose emotions.
+
+Current turn flow:
+
+    turn starts
+        -> thinking / focused
+    first assistant text arrives
+        -> speaking / engaged
+    turn completes, fails, or is cancelled
+        -> idle / neutral
+
+These states are persisted as `aisha.embodiment.state` events and are available
+from `GET /v1/embodiment/state`.
+
+A future renderer owns the visual interpretation:
+
+    semantic intent
+        -> renderer policy
+        -> animation clip / blendshapes / gaze / body pose / procedural motion
+
+This separation means a renderer can move from a browser prototype to Unity or
+another engine without changing AISHA cognition.
+
+### Future affect layer
+
+Emotion/content-aware expressions should be a separate layer from lifecycle state.
+For example, a future response planner could add a bounded affect intent such as
+warm, amused, concerned, or surprised. The renderer would blend affect with the
+lifecycle state. That work should not make raw model prose directly control facial
+blendshapes.
+
+## Perception
+
+AISHA Core does not own camera pixels. A vision backend converts frames into a
+`VisionFrame` containing structured `VisionObservation` records.
+
+Example observations:
+
+- person present;
+- face location;
+- gaze direction;
+- hand/gesture;
+- object;
+- scene state;
+- screen-region observation.
+
+A `VisionObservation` may contain a normalized bounding box, confidence, label,
+and provider-specific attributes. `VisionFrame.image_ref` is only an opaque
+provider-local reference; raw image bytes are intentionally absent from the Core
+contract.
+
+Current flow:
+
+    camera / screen source
+        -> replaceable vision provider
+        -> VisionFrame
+        -> PerceptionHub
+        -> latest structured scene state
+        -> future cognition policy
+
+`PerceptionHub` currently retains only the latest structured frame in memory.
+Core starts with a disabled provider. No camera is opened and no visual data is
+persisted.
+
+Developer endpoints:
+
+- `GET /v1/perception/status`
+- `GET /v1/perception/latest`
+
+## Why this is portable
+
+The eventual workstation can independently choose:
+
+- camera hardware;
+- frame-capture implementation;
+- face/gaze/pose model;
+- object detector;
+- GPU runtime;
+- avatar renderer.
+
+AISHA Core only depends on the contracts. The same tests therefore run with mock
+providers on Windows, macOS, Linux, or CI.
+
+## Likely future milestones
+
+1. Browser/Studio expression-state preview.
+2. Renderer client that subscribes to embodiment events.
+3. Camera-source abstraction with explicit user enable/disable.
+4. Local person/face/pose provider.
+5. Gaze and gesture observations.
+6. Perception-to-cognition policy deciding which observations are relevant enough
+   to mention or use.
+7. Optional affect planner, separate from basic speaking/thinking lifecycle.
+8. Unity or other full avatar renderer.
+
+Camera and screen observations should remain local by default, bounded in
+retention, and explicit about when they are active.
