@@ -15,12 +15,7 @@ from aisha.memory.ledger import ExperienceLedger
 from aisha.memory.reflector import OllamaReflector
 from aisha.memory.relevance import OllamaMemoryRelevanceGate
 from aisha.memory.semantic import OllamaSemanticMemoryRetriever
-from aisha.perception.analyzer import DisabledVisionAnalyzer
-from aisha.perception.camera import DisabledCameraSource
-from aisha.perception.controller import CameraController
-from aisha.perception.hub import PerceptionHub
-from aisha.perception.mock import DisabledVisionProvider
-from aisha.perception.runtime import PerceptionRuntime
+from aisha.perception.registry import build_perception_components
 from aisha.providers.base import AISHAProviderError
 from aisha.providers.registry import build_llm_provider
 from aisha.settings import Settings
@@ -135,9 +130,9 @@ async def lifespan(app: FastAPI):
         "store": store,
         "provider": provider,
         "orchestrator": orchestrator,
-        "perception_hub": perception_hub,
-        "camera_controller": camera_controller,
-        "perception_runtime": perception_runtime,
+        "perception_hub": perception.hub,
+        "camera_controller": perception.camera,
+        "perception_runtime": perception.runtime,
         "ledger": ledger,
         "memory_integrity_startup": memory_integrity_startup,
         "warmup_metrics": warmup_metrics,
@@ -145,7 +140,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        await perception_runtime.stop()
+        await perception.runtime.stop()
         await orchestrator.stop_reflections()
 
 
