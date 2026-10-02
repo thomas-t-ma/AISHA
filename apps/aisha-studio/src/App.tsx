@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import {
   createSession,
+  getEmbodimentState,
   getEvents,
   getHealth,
   getMessages,
@@ -9,10 +10,51 @@ import {
   getSessionSettings,
   setSessionMemoryMode,
 } from './api';
+import EmbodimentPreview from './EmbodimentPreview';
 import MemoryPanel from './MemoryPanel';
-import type { AISHAEvent, ChatMessage, ModelRun, RuntimeHealth, TurnLatency } from './types';
+import type {
+  AISHAEvent,
+  ChatMessage,
+  EmbodimentState,
+  ModelRun,
+  RuntimeHealth,
+  TurnLatency,
+} from './types';
 
 const SESSION_KEY = 'aisha.studio.session.v1';
+
+const DEFAULT_EMBODIMENT: EmbodimentState = {
+  sequence: 0,
+  activity: 'idle',
+  expression: 'neutral',
+  intensity: 0.2,
+  updated_at: '',
+};
+
+function embodimentFromPayload(payload: Record<string, unknown>): EmbodimentState | null {
+  const activity = payload.activity;
+  const expression = payload.expression;
+  const sequence = payload.sequence;
+  const intensity = payload.intensity;
+  const updatedAt = payload.updated_at;
+
+  if (
+    !['idle', 'listening', 'thinking', 'speaking'].includes(String(activity))
+    || !['neutral', 'attentive', 'focused', 'engaged'].includes(String(expression))
+    || typeof sequence !== 'number'
+    || typeof intensity !== 'number'
+  ) {
+    return null;
+  }
+
+  return {
+    sequence,
+    activity: activity as EmbodimentState['activity'],
+    expression: expression as EmbodimentState['expression'],
+    intensity,
+    updated_at: typeof updatedAt === 'string' ? updatedAt : '',
+  };
+}
 
 function numeric(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -62,6 +104,7 @@ export default function App() {
     () => window.localStorage.getItem(SESSION_KEY) ?? '',
   );
   const [health, setHealth] = useState<RuntimeHealth | null>(null);
+  const [embodiment, setEmbodiment] = useState<EmbodimentState>(DEFAULT_EMBODIMENT);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [connection, setConnection] = useState<'connecting' | 'online' | 'offline'>('connecting');
@@ -85,7 +128,9 @@ export default function App() {
 
   const refreshHealth = useCallback(async () => {
     try {
-      setHealth(await getHealth());
+      const nextHealth = await getHealth();
+      setHealth(nextHealth);
+      if (nextHealth.embodiment) setEmbodiment(nextHealth.embodiment);
     } catch {
       setHealth(null);
       setNotice('AISHA Core is unavailable. Start the Python server on port 8000.');
@@ -103,6 +148,9 @@ export default function App() {
 
   useEffect(() => {
     void refreshHealth();
+    void getEmbodimentState()
+      .then(setEmbodiment)
+      .catch(() => undefined);
   }, [refreshHealth]);
 
   useEffect(() => {
@@ -184,6 +232,11 @@ export default function App() {
       const payload = event.payload ?? {};
 
       switch (event.type) {
+        case 'aisha.embodiment.state': {
+          const next = embodimentFromPayload(payload);
+          if (next) setEmbodiment(next);
+          break;
+        }
         case 'aisha.turn.started':
           setActiveTurnId(turnId);
           setBusy(true);
@@ -430,6 +483,7 @@ export default function App() {
             <h1>Talk to AISHA<span className="title-star">✦</span></h1>
           </div>
           <div className="topbar-actions">
+            <EmbodimentPreview state={embodiment} compact />
             <button className="inspector-toggle" onClick={() => setMemoryOpen(true)}>Memory ✦</button>
             <span className={'connection-badge ' + connection}>
               <span className="status-dot" /> {statusText}
@@ -451,11 +505,11 @@ export default function App() {
         <section className="chat-scroll" aria-label="Conversation">
           {messages.length === 0 ? (
             <div className="welcome">
-              <div className="welcome-orb">✦</div>
-              <div className="eyebrow">A PLACE TO BEGIN</div>
-              <h2>She's listening.</h2>
-              <p>Start a conversation. AISHA Core will handle the model, persona, and memory of this session.</p>
-              <div className="welcome-meta">LOCAL MODEL · NO HOSTED API REQUIRED</div>
+              <EmbodimentPreview state={embodiment} />
+              <div className="eyebrow welcome-eyebrow">A PLACE TO BEGIN</div>
+              <h2>She's here.</h2>
+              <p>Start a conversation and watch the development embodiment react to AISHA's live turn state.</p>
+              <div className="welcome-meta">SEMANTIC STATE · RENDERER-INDEPENDENT · LOCAL</div>
             </div>
           ) : (
             <div className="chat-thread">
