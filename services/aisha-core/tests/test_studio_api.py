@@ -104,3 +104,30 @@ def test_session_memory_mode_defaults_normal_and_can_be_toggled(tmp_path, monkey
             headers={"origin": "https://unrelated.example"},
         )
         assert rejected_origin.status_code == 403
+
+
+
+def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
+    monkeypatch.setenv("AISHA_PROFILE", "mock")
+    monkeypatch.setenv("AISHA_DATA_DIR", str(tmp_path))
+
+    with TestClient(app) as client:
+        embodiment = client.get("/v1/embodiment/state")
+        assert embodiment.status_code == 200
+        assert embodiment.json()["activity"] == "idle"
+        assert embodiment.json()["expression"] == "neutral"
+
+        perception = client.get("/v1/perception/status")
+        assert perception.status_code == 200
+        assert perception.json()["enabled"] is False
+        assert perception.json()["provider"] == "disabled"
+        assert perception.json()["observation_count"] == 0
+
+        latest = client.get("/v1/perception/latest")
+        assert latest.status_code == 200
+        assert latest.json() is None
+
+        health = client.get("/v1/health")
+        assert health.status_code == 200
+        assert health.json()["embodiment"]["activity"] == "idle"
+        assert health.json()["perception"]["enabled"] is False
