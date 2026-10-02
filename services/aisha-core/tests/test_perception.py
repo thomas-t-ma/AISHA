@@ -145,8 +145,9 @@ async def test_camera_controller_is_explicitly_disabled_until_enabled():
     initial = controller.status()
     assert initial["enabled"] is False
     assert initial["privacy"]["camera_active"] is False
-    assert initial["privacy"]["raw_pixels_in_core"] is False
+    assert initial["privacy"]["raw_pixels_in_semantic_state"] is False
     assert initial["privacy"]["capture_persisted"] is False
+    assert initial["privacy"]["raw_frame_scope"] == "none"
     assert await controller.capture_once() is None
 
     enabled = controller.enable()
@@ -317,6 +318,7 @@ async def test_opencv_camera_source_uses_bounded_ephemeral_store():
 
     source.enable()
     assert source.status()["enabled"] is True
+    assert source.status()["raw_frame_scope"] == "ephemeral-provider-memory"
     descriptor = await source.capture()
     assert descriptor is not None
     assert descriptor.source_id == "camera_test"
@@ -374,6 +376,8 @@ def test_mediapipe_result_translation_stays_observable_only():
     assert face.bounding_box.y == pytest.approx(0.10)
     assert face.bounding_box.width == pytest.approx(0.40)
     assert face.bounding_box.height == pytest.approx(0.70)
+    assert face.confidence == 0.5
+    assert face.attributes["confidence_source"] == "presence_unscored"
     assert face.attributes["blendshapes"] == {
         "eyeBlinkLeft": 0.25,
         "jawOpen": 0.40,
