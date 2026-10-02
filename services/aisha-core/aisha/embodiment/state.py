@@ -5,7 +5,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 EmbodimentActivity = Literal["idle", "listening", "thinking", "speaking"]
 ExpressionIntent = Literal["neutral", "attentive", "focused", "engaged"]
 
