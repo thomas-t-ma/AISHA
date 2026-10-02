@@ -8,6 +8,22 @@ export interface EmbodimentState {
   updated_at: string;
 }
 
+export interface CameraStatus {
+  available: boolean;
+  enabled: boolean;
+  source: string;
+  captures_seen: number;
+  latest_capture_ref: string | null;
+  latest_source_id: string | null;
+  latest_captured_at: string | null;
+  privacy: {
+    camera_active: boolean;
+    raw_pixels_in_core: boolean;
+    capture_persisted: boolean;
+  };
+  checked_at: string;
+}
+
 export interface RuntimeHealth {
   status: string;
   profile: string;
@@ -24,6 +40,7 @@ export interface RuntimeHealth {
     enabled?: boolean;
     provider?: string;
     observation_count?: number;
+    camera?: CameraStatus;
   };
 }
 
