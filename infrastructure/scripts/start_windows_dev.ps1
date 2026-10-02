@@ -1,6 +1,7 @@
 param(
     [ValidateSet("mock", "mac-m2max-96gb", "nvidia-2070", "nvidia-5080", "nvidia-high")]
     [string]$Profile = "mock",
+    [switch]$Vision,
     [switch]$SkipInstall
 )
 
@@ -34,6 +35,38 @@ if (-not (Test-Path $Python)) {
     throw "AISHA Python environment is missing at $Python. Run infrastructure\scripts\bootstrap_windows.ps1 once."
 }
 
+if ($Vision) {
+    Push-Location $Core
+    try {
+        & $Python -c "import cv2, mediapipe" 2>$null
+        $visionPackagesReady = $LASTEXITCODE -eq 0
+
+        if (-not $visionPackagesReady) {
+            if ($SkipInstall) {
+                throw "Vision packages are missing. Run without -SkipInstall once."
+            }
+            Write-Host "Installing optional AISHA local vision dependencies..."
+            & $Python -m pip install -e ".[vision-local]"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not install AISHA local vision dependencies."
+            }
+        }
+
+        if ($SkipInstall) {
+            & $Python scripts\setup_local_vision.py
+        }
+        else {
+            & $Python scripts\setup_local_vision.py --download-model
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "AISHA local vision setup is incomplete."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 $Fnm = Resolve-Fnm
 $NodeVersion = (Get-Content $NodeVersionFile -Raw).Trim()
 
@@ -62,8 +95,16 @@ if (-not $SkipInstall -and -not (Test-Path (Join-Path $Studio "node_modules"))) 
     }
 }
 
+$VisionEnvironment = if ($Vision) {
+    "`$env:AISHA_VISION_PROVIDER = 'local-mediapipe'"
+}
+else {
+    ""
+}
+
 $BackendCommand = @"
 `$env:AISHA_PROFILE = '$Profile'
+$VisionEnvironment
 Set-Location '$Core'
 & '$Python' -m uvicorn aisha.main:app --reload --host 127.0.0.1 --port 8000
 "@
@@ -76,7 +117,8 @@ Set-Location '$Studio'
 "@
 
 Write-Host ""
-Write-Host "Starting AISHA Core ($Profile) and AISHA Studio..."
+$VisionLabel = if ($Vision) { "local vision enabled" } else { "vision disabled" }
+Write-Host "Starting AISHA Core ($Profile, $VisionLabel) and AISHA Studio..."
 Write-Host "Studio: http://127.0.0.1:5173"
 Write-Host ""
 
