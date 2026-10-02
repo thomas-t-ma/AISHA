@@ -4,10 +4,10 @@ from aisha.perception.mock import DisabledVisionProvider, MockVisionProvider
 
 __all__ = [
     "BoundingBox",
+    "DisabledVisionProvider",
+    "MockVisionProvider",
+    "PerceptionHub",
     "VisionFrame",
     "VisionObservation",
     "VisionProvider",
-    "PerceptionHub",
-    "DisabledVisionProvider",
-    "MockVisionProvider",
 ]
