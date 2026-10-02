@@ -6,6 +6,7 @@ import json
 import sqlite3
 import tempfile
 import zipfile
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -32,8 +33,14 @@ def _sha256(path: Path) -> str:
 
 def _sqlite_backup(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(source) as source_db, sqlite3.connect(destination) as dest_db:
+    # sqlite3.Connection's context manager commits/rolls back but does not
+    # close the handle. Windows refuses to delete temporary databases while
+    # those handles remain open, so snapshot helpers close them explicitly.
+    with closing(sqlite3.connect(source)) as source_db, closing(
+        sqlite3.connect(destination)
+    ) as dest_db:
         source_db.backup(dest_db)
+        dest_db.commit()
 
 
 async def _audit_database(path: Path) -> dict:
