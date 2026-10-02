@@ -1,4 +1,4 @@
-import type { EmbodimentState } from './types';
+import type { EmbodimentState, PerceptionSummary } from './types';
 
 export interface RendererInput {
   sequence: number;
@@ -7,6 +7,7 @@ export interface RendererInput {
   activityIntensity: number;
   affect: EmbodimentState['affect'];
   affectIntensity: number;
+  attentionTarget: 'viewer' | 'ambient';
 }
 
 export interface EmbodimentRendererAdapter {
@@ -15,7 +16,10 @@ export interface EmbodimentRendererAdapter {
   dispose(): void;
 }
 
-export function toRendererInput(state: EmbodimentState): RendererInput {
+export function toRendererInput(
+  state: EmbodimentState,
+  perception?: PerceptionSummary | null,
+): RendererInput {
   return {
     sequence: state.sequence,
     activity: state.activity,
@@ -23,5 +27,10 @@ export function toRendererInput(state: EmbodimentState): RendererInput {
     activityIntensity: state.intensity,
     affect: state.affect,
     affectIntensity: state.affect_intensity,
+    attentionTarget: (
+      perception?.person_present && perception.gaze_toward_camera
+        ? 'viewer'
+        : 'ambient'
+    ),
   };
 }
