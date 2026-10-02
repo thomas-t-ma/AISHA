@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, field_validator
 
+from aisha.embodiment.state import AffectIntent
+
 router = APIRouter(prefix="/v1")
 
 LOCAL_STUDIO_ORIGINS = {
@@ -52,6 +54,11 @@ class SessionSettingsWrite(BaseModel):
 
 class CancelResponse(BaseModel):
     cancelled_turn_id: str | None
+
+
+class EmbodimentAffectWrite(BaseModel):
+    affect: AffectIntent
+    intensity: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 @router.get("/health")
@@ -174,6 +181,18 @@ async def session_model_runs(
 @router.get("/embodiment/state")
 async def embodiment_state(request: Request):
     return request.app.state.aisha["orchestrator"].embodiment_status()
+
+
+@router.post("/embodiment/affect")
+async def set_embodiment_affect(
+    request: Request,
+    update: EmbodimentAffectWrite,
+):
+    _check_local_origin(request)
+    return request.app.state.aisha["orchestrator"].set_embodiment_affect(
+        update.affect,
+        intensity=update.intensity,
+    )
 
 
 @router.get("/perception/status")
