@@ -8,14 +8,17 @@ on:
 jobs:
   core:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     defaults:
       run:
         working-directory: services/aisha-core
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: services/aisha-core/pyproject.toml
       - name: Install
@@ -35,20 +38,19 @@ jobs:
       run:
         working-directory: apps/aisha-studio
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "22"
+          node-version-file: apps/aisha-studio/.node-version
       - name: Install
         run: npm install
       - name: Typecheck and build
         run: npm run build
 
-
   windows-scripts:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Parse PowerShell development scripts
         shell: pwsh
         run: |
