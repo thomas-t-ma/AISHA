@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,6 +10,11 @@ from aisha.perception.base import BoundingBox, VisionFrame, VisionObservation
 from aisha.perception.camera import CameraFrameDescriptor, MockCameraSource
 from aisha.perception.controller import CameraController
 from aisha.perception.hub import PerceptionHub
+from aisha.perception.local import (
+    EphemeralFrameStore,
+    MediaPipeFaceAnalyzer,
+    OpenCVCameraSource,
+)
 from aisha.perception.mock import DisabledVisionProvider, MockVisionProvider
 from aisha.perception.runtime import PerceptionRuntime
 
@@ -263,3 +269,126 @@ async def test_perception_runtime_start_and_stop_are_idempotent():
 
     await runtime.stop()
     assert runtime.status()["running"] is False
+
+
+
+class _FakeCapture:
+    def __init__(self, frame):
+        self.frame = frame
+        self.opened = True
+        self.released = False
+
+    def isOpened(self):
+        return self.opened
+
+    def read(self):
+        return True, self.frame
+
+    def release(self):
+        self.opened = False
+        self.released = True
+
+
+class _FakeCV2:
+    CAP_ANY = 0
+    CAP_MSMF = 1400
+
+    def __init__(self, capture):
+        self.capture = capture
+        self.open_calls = []
+
+    def VideoCapture(self, index, backend):
+        self.open_calls.append((index, backend))
+        return self.capture
+
+
+@pytest.mark.asyncio
+async def test_opencv_camera_source_uses_bounded_ephemeral_store():
+    frame = SimpleNamespace(shape=(480, 640, 3))
+    capture = _FakeCapture(frame)
+    cv2 = _FakeCV2(capture)
+    store = EphemeralFrameStore(max_frames=2)
+    source = OpenCVCameraSource(
+        store,
+        camera_index=2,
+        source_id="camera_test",
+        cv2_module=cv2,
+    )
+
+    source.enable()
+    assert source.status()["enabled"] is True
+    descriptor = await source.capture()
+    assert descriptor is not None
+    assert descriptor.source_id == "camera_test"
+    assert descriptor.width == 640
+    assert descriptor.height == 480
+    assert len(store) == 1
+    assert store.pop(descriptor.frame_ref) is frame
+    assert len(store) == 0
+
+    source.disable()
+    assert capture.released is True
+    assert source.status()["enabled"] is False
+    assert len(store) == 0
+
+
+def test_ephemeral_frame_store_evicts_oldest_frame():
+    store = EphemeralFrameStore(max_frames=2)
+    store.put("one", object())
+    store.put("two", object())
+    third = object()
+    store.put("three", third)
+
+    assert store.pop("one") is None
+    assert store.pop("two") is not None
+    assert store.pop("three") is third
+
+
+def test_mediapipe_result_translation_stays_observable_only():
+    landmarks = [
+        SimpleNamespace(x=0.20, y=0.10),
+        SimpleNamespace(x=0.60, y=0.80),
+    ]
+    blendshapes = [
+        SimpleNamespace(category_name="eyeBlinkLeft", score=0.25),
+        SimpleNamespace(category_name="jawOpen", score=0.40),
+    ]
+
+    class _Matrix:
+        def tolist(self):
+            return [[1.0, 0.0], [0.0, 1.0]]
+
+    result = SimpleNamespace(
+        face_landmarks=[landmarks],
+        face_blendshapes=[blendshapes],
+        facial_transformation_matrixes=[_Matrix()],
+    )
+
+    observations = MediaPipeFaceAnalyzer.observations_from_result(result)
+    assert len(observations) == 1
+    face = observations[0]
+    assert face.kind == "face"
+    assert face.label == "face"
+    assert face.bounding_box is not None
+    assert face.bounding_box.x == pytest.approx(0.20)
+    assert face.bounding_box.y == pytest.approx(0.10)
+    assert face.bounding_box.width == pytest.approx(0.40)
+    assert face.bounding_box.height == pytest.approx(0.70)
+    assert face.attributes["blendshapes"] == {
+        "eyeBlinkLeft": 0.25,
+        "jawOpen": 0.40,
+    }
+    assert face.attributes["facial_transform"] == [
+        [1.0, 0.0],
+        [0.0, 1.0],
+    ]
+
+    hub = PerceptionHub(DisabledVisionProvider())
+    hub.accept(
+        VisionFrame(
+            source_id="camera_front",
+            observations=observations,
+        )
+    )
+    assert hub.summary().person_present is True
+    assert hub.summary().person_count == 1
