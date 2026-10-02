@@ -43,6 +43,15 @@ class MemoryProfile(BaseModel):
     )
 
 
+class VisionProfile(BaseModel):
+    provider: Literal["disabled", "local-mediapipe"] = "disabled"
+    camera_index: int = Field(default=0, ge=0)
+    source_id: str = "camera_front"
+    poll_interval_seconds: float = Field(default=0.5, ge=0.05, le=10.0)
+    num_faces: int = Field(default=2, ge=1, le=8)
+    model_path: str | None = None
+
+
 class RuntimeProfile(BaseModel):
     name: str
     compute: dict[str, Any]
@@ -50,7 +59,7 @@ class RuntimeProfile(BaseModel):
     memory: MemoryProfile = Field(default_factory=MemoryProfile)
     stt: dict[str, Any] = Field(default_factory=dict)
     tts: dict[str, Any] = Field(default_factory=dict)
-    vision: dict[str, Any] = Field(default_factory=dict)
+    vision: VisionProfile = Field(default_factory=VisionProfile)
     notes: str | None = None
 
 
@@ -70,6 +79,10 @@ class Settings(BaseSettings):
     aisha_llm_api_key: str | None = None
     aisha_llm_think: bool | Literal["low", "medium", "high", "max"] | None = None
     aisha_llm_keep_alive: str | int | None = None
+
+    aisha_vision_provider: Literal["disabled", "local-mediapipe"] | None = None
+    aisha_vision_camera_index: int | None = None
+    aisha_vision_model_path: str | None = None
 
     @property
     def data_dir(self) -> Path:
@@ -99,6 +112,12 @@ class Settings(BaseSettings):
             profile.llm.think = self.aisha_llm_think
         if self.aisha_llm_keep_alive is not None:
             profile.llm.keep_alive = self.aisha_llm_keep_alive
+        if self.aisha_vision_provider is not None:
+            profile.vision.provider = self.aisha_vision_provider
+        if self.aisha_vision_camera_index is not None:
+            profile.vision.camera_index = self.aisha_vision_camera_index
+        if self.aisha_vision_model_path is not None:
+            profile.vision.model_path = self.aisha_vision_model_path
         return profile
 
     def resolve_api_key(self, profile: RuntimeProfile) -> str | None:
