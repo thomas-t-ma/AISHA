@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import { toRendererInput } from './renderer';
-import type { EmbodimentState } from './types';
+import type { EmbodimentState, PerceptionSummary } from './types';
 
 interface EmbodimentPreviewProps {
   state: EmbodimentState;
+  perception?: PerceptionSummary | null;
   compact?: boolean;
 }
 
@@ -29,7 +30,11 @@ function randomBetween(min: number, max: number): number {
   return min + Math.random() * (max - min);
 }
 
-function gazeBias(activity: EmbodimentState['activity']): Point {
+function gazeBias(
+  activity: EmbodimentState['activity'],
+  attentionTarget: 'viewer' | 'ambient',
+): Point {
+  if (attentionTarget === 'viewer') return { x: 0, y: 0 };
   if (activity === 'thinking') return { x: 1.4, y: -1.7 };
   if (activity === 'listening') return { x: 0, y: -0.3 };
   if (activity === 'speaking') return { x: 0.4, y: 0 };
@@ -38,9 +43,10 @@ function gazeBias(activity: EmbodimentState['activity']): Point {
 
 export default function EmbodimentPreview({
   state,
+  perception = null,
   compact = false,
 }: EmbodimentPreviewProps) {
-  const renderer = toRendererInput(state);
+  const renderer = toRendererInput(state, perception);
   const [blinking, setBlinking] = useState(false);
   const [gaze, setGaze] = useState<Point>({ x: 0, y: 0 });
   const [head, setHead] = useState<HeadPose>({ x: 0, y: 0, tilt: 0 });
@@ -85,8 +91,10 @@ export default function EmbodimentPreview({
 
     let gazeTimer: number | undefined;
     let cancelled = false;
-    const bias = gazeBias(renderer.activity);
-    const amplitude = compact ? 1.25 : 2.15;
+    const bias = gazeBias(renderer.activity, renderer.attentionTarget);
+    const amplitude = renderer.attentionTarget === 'viewer'
+      ? (compact ? 0.35 : 0.55)
+      : (compact ? 1.25 : 2.15);
 
     const scheduleGaze = () => {
       gazeTimer = window.setTimeout(() => {
@@ -105,7 +113,7 @@ export default function EmbodimentPreview({
       cancelled = true;
       if (gazeTimer !== undefined) window.clearTimeout(gazeTimer);
     };
-  }, [compact, renderer.activity]);
+  }, [compact, renderer.activity, renderer.attentionTarget]);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -162,6 +170,7 @@ export default function EmbodimentPreview({
         + ' · affect ' + renderer.affect
         + ' ' + renderer.affectIntensity.toFixed(2)
         + ' · activity intensity ' + renderer.activityIntensity.toFixed(2)
+        + ' · attention ' + renderer.attentionTarget
       }
     >
       <div className="embodiment-stage" aria-hidden="true">
