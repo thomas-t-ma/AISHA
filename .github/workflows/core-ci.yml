@@ -43,3 +43,34 @@ jobs:
         run: npm install
       - name: Typecheck and build
         run: npm run build
+
+
+  windows-scripts:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse PowerShell development scripts
+        shell: pwsh
+        run: |
+          $files = @(
+            "Start-AISHA.ps1",
+            "infrastructure/scripts/bootstrap_windows.ps1",
+            "infrastructure/scripts/start_windows_dev.ps1"
+          )
+          $failed = $false
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Error "$file has PowerShell parse errors: $($errors -join '; ')"
+            }
+          }
+          if ($failed) {
+            exit 1
+          }
