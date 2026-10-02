@@ -41,7 +41,11 @@ class PerceptionHub:
             for observation in latest.observations
             if observation.confidence >= 0.5
         ]
-        people = [observation for observation in reliable if observation.kind == "person"]
+        people = [
+            observation
+            for observation in reliable
+            if observation.kind in {"person", "face"}
+        ]
         gaze_toward_camera = any(
             observation.kind == "gaze"
             and observation.label == "toward_camera"
