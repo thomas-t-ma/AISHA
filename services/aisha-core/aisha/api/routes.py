@@ -80,6 +80,8 @@ async def health(request: Request):
         "perception": {
             **state["perception_hub"].status(),
             "camera": state["camera_controller"].status(),
+            "analyzer": state["perception_runtime"].analyzer.status(),
+            "analysis_steps": state["perception_runtime"].status()["analysis_steps"],
         },
         "memory_integrity": state.get("memory_integrity_startup", {}),
         "auto_memory": state["orchestrator"].memory_status(),
@@ -216,6 +218,11 @@ async def perception_latest(request: Request):
 @router.get("/perception/summary")
 async def perception_summary(request: Request):
     return request.app.state.aisha["perception_hub"].summary().model_dump(mode="json")
+
+
+@router.get("/perception/runtime")
+async def perception_runtime_status(request: Request):
+    return request.app.state.aisha["perception_runtime"].status()
 
 
 @router.get("/perception/camera")
