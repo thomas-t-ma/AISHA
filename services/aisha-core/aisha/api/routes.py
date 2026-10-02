@@ -56,6 +56,10 @@ class CancelResponse(BaseModel):
     cancelled_turn_id: str | None
 
 
+class CameraStateWrite(BaseModel):
+    enabled: bool
+
+
 class EmbodimentAffectWrite(BaseModel):
     affect: AffectIntent
     intensity: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -73,7 +77,10 @@ async def health(request: Request):
         "data_dir": str(state["settings"].data_dir),
         "warmup": state.get("warmup_metrics", {}),
         "embodiment": state["orchestrator"].embodiment_status(),
-        "perception": state["perception_hub"].status(),
+        "perception": {
+            **state["perception_hub"].status(),
+            "camera": state["camera_controller"].status(),
+        },
         "memory_integrity": state.get("memory_integrity_startup", {}),
         "auto_memory": state["orchestrator"].memory_status(),
     }
@@ -204,6 +211,21 @@ async def perception_status(request: Request):
 async def perception_latest(request: Request):
     frame = request.app.state.aisha["perception_hub"].latest()
     return None if frame is None else frame.model_dump(mode="json")
+
+
+@router.get("/perception/camera")
+async def perception_camera_status(request: Request):
+    return request.app.state.aisha["camera_controller"].status()
+
+
+@router.post("/perception/camera")
+async def set_perception_camera(
+    request: Request,
+    update: CameraStateWrite,
+):
+    _check_local_origin(request)
+    controller = request.app.state.aisha["camera_controller"]
+    return controller.enable() if update.enabled else controller.disable()
 
 
 @router.get("/memory/status")
