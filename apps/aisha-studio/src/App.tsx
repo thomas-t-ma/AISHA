@@ -7,6 +7,7 @@ import {
   getEvents,
   getHealth,
   getMessages,
+  getPerceptionSummary,
   getRuns,
   getSessionSettings,
   setCameraEnabled,
@@ -23,6 +24,7 @@ import type {
   ChatMessage,
   EmbodimentState,
   ModelRun,
+  PerceptionSummary,
   RuntimeHealth,
   TurnLatency,
 } from './types';
@@ -122,6 +124,7 @@ export default function App() {
   const [health, setHealth] = useState<RuntimeHealth | null>(null);
   const [embodiment, setEmbodiment] = useState<EmbodimentState>(DEFAULT_EMBODIMENT);
   const [cameraStatus, setCameraStatus] = useState<CameraStatus | null>(null);
+  const [perceptionSummary, setPerceptionSummary] = useState<PerceptionSummary | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [connection, setConnection] = useState<'connecting' | 'online' | 'offline'>('connecting');
@@ -174,6 +177,9 @@ export default function App() {
     void getCameraStatus()
       .then(setCameraStatus)
       .catch(() => undefined);
+    void getPerceptionSummary()
+      .then(setPerceptionSummary)
+      .catch(() => undefined);
   }, [refreshHealth]);
 
   useEffect(() => {
@@ -193,6 +199,28 @@ export default function App() {
         creatingRef.current = false;
       });
   }, [sessionId]);
+
+  useEffect(() => {
+    if (!cameraStatus?.enabled) {
+      return;
+    }
+
+    let cancelled = false;
+    const refresh = () => {
+      void getPerceptionSummary()
+        .then((summary) => {
+          if (!cancelled) setPerceptionSummary(summary);
+        })
+        .catch(() => undefined);
+    };
+
+    refresh();
+    const timer = window.setInterval(refresh, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [cameraStatus?.enabled]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -535,7 +563,11 @@ export default function App() {
             <h1>Talk to AISHA<span className="title-star">✦</span></h1>
           </div>
           <div className="topbar-actions">
-            <EmbodimentPreview state={embodiment} compact />
+            <EmbodimentPreview
+              state={embodiment}
+              perception={perceptionSummary}
+              compact
+            />
             <button className="inspector-toggle" onClick={() => setMemoryOpen(true)}>Memory ✦</button>
             <span className={'connection-badge ' + connection}>
               <span className="status-dot" /> {statusText}
@@ -557,7 +589,10 @@ export default function App() {
         <section className="chat-scroll" aria-label="Conversation">
           {messages.length === 0 ? (
             <div className="welcome">
-              <EmbodimentPreview state={embodiment} />
+              <EmbodimentPreview
+                state={embodiment}
+                perception={perceptionSummary}
+              />
               <div className="embodiment-debug-grid">
                 <AffectControls
                   state={embodiment}
