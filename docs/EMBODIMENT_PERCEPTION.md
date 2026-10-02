@@ -37,6 +37,25 @@ A future renderer owns the visual interpretation:
 This separation means a renderer can move from a browser prototype to Unity or
 another engine without changing AISHA cognition.
 
+### Procedural renderer layer
+
+Studio now adds low-level life entirely on the renderer side: randomized blink
+timing, eye micro-saccades, activity-biased gaze, subtle head drift, breathing,
+and smooth interpolation between poses. These signals are intentionally not
+Core events and are never written to the AISHA database.
+
+This separation is important:
+
+    Core semantic state:
+      activity + affect + intensity
+
+    Renderer-local presentation:
+      blink + gaze + breathing + head drift + future lip sync
+
+The same semantic state can therefore drive a CSS development face today and a
+future Live2D, Three.js, Unity, or other avatar renderer without changing
+cognition or persistence.
+
 ### Affect layer
 
 Affect is now a separate semantic channel from lifecycle activity. Current affect
