@@ -65,10 +65,9 @@ class PerceptionRuntime:
     async def stop(self) -> None:
         task = self._task
         self._task = None
-        if task is None:
-            return
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
         self.analyzer.close()
 
     def status(self) -> dict[str, Any]:
