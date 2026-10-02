@@ -5,6 +5,10 @@ on:
     branches: [main, feature/semantic-recall-v1]
   pull_request:
 
+concurrency:
+  group: aisha-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   core:
     runs-on: ubuntu-latest
@@ -76,3 +80,24 @@ jobs:
           if ($failed) {
             exit 1
           }
+
+
+  vision-deps:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: services/aisha-core
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: services/aisha-core/pyproject.toml
+      - name: Install optional local vision stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[vision-local]"
+      - name: Import vision dependencies
+        run: |
+          python -c "import cv2, mediapipe; print('opencv', cv2.__version__); print('mediapipe', mediapipe.__version__)"
