@@ -174,6 +174,17 @@ async def embodiment_state(request: Request):
     return request.app.state.aisha["orchestrator"].embodiment_status()
 
 
+@router.get("/perception/status")
+async def perception_status(request: Request):
+    return request.app.state.aisha["perception_hub"].status()
+
+
+@router.get("/perception/latest")
+async def perception_latest(request: Request):
+    frame = request.app.state.aisha["perception_hub"].latest()
+    return None if frame is None else frame.model_dump(mode="json")
+
+
 @router.get("/memory/status")
 async def automatic_memory_status(request: Request):
     return request.app.state.aisha["orchestrator"].memory_status()
