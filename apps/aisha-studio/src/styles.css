@@ -592,3 +592,77 @@ button:disabled { cursor: not-allowed; opacity: .44; }
     transform: none !important;
   }
 }
+
+
+.embodiment-debug-grid {
+  width: min(100%, 760px);
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, .85fr);
+  gap: 10px;
+  align-items: stretch;
+  margin: -3px 0 24px;
+}
+.embodiment-debug-grid .affect-controls {
+  width: 100%;
+  margin: 0;
+}
+.camera-privacy {
+  display: flex; flex-direction: column; gap: 10px;
+  min-width: 0; padding: 12px 14px;
+  border: 1px solid #342e46;
+  border-radius: 12px;
+  background: #181522a8;
+  text-align: left;
+}
+.camera-privacy.active {
+  border-color: #755e8d;
+  box-shadow: inset 0 0 22px #9e72ce0b;
+}
+.camera-privacy-head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.camera-privacy-head > div {
+  display: flex; flex-direction: column; gap: 4px;
+}
+.camera-privacy-head strong {
+  color: #ded7e9; font-size: 11px; font-weight: 700;
+}
+.camera-state-pill {
+  flex: 0 0 auto; min-width: 34px; padding: 4px 7px;
+  border-radius: 999px; text-align: center;
+  font-size: 8px; font-weight: 800; letter-spacing: .08em;
+}
+.camera-state-pill.off {
+  color: #aaa2b7; background: #272230; border: 1px solid #403849;
+}
+.camera-state-pill.on {
+  color: #dff5e8; background: #21382f; border: 1px solid #476f5c;
+  box-shadow: 0 0 12px #74c79b22;
+}
+.camera-privacy-facts {
+  display: grid; gap: 4px; color: #8f879f; font-size: 9px;
+}
+.camera-privacy-facts span {
+  display: flex; justify-content: space-between; gap: 10px;
+}
+.camera-privacy-facts strong {
+  color: #b9afc6; font-weight: 700; text-transform: uppercase;
+}
+.camera-privacy button {
+  margin-top: auto; width: 100%;
+  border: 1px solid #443a53; border-radius: 8px;
+  background: #241e30; color: #bcb3c8;
+  padding: 7px 9px; font-size: 9px;
+}
+.camera-privacy button:hover:not(:disabled) {
+  background: #30273e; color: #eee5f6;
+}
+.camera-privacy.active button {
+  border-color: #6a536f; color: #dccbdd;
+}
+
+@media (max-width: 700px) {
+  .embodiment-debug-grid {
+    grid-template-columns: 1fr;
+  }
+}
