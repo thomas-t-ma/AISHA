@@ -132,6 +132,7 @@ class OpenCVCameraSource:
             "source": self.name,
             "camera_index": self.camera_index,
             "backend": "msmf" if os.name == "nt" else "auto",
+            "raw_frame_scope": "ephemeral-provider-memory",
             "buffered_frames": len(self.frame_store),
             "last_error": self._last_error,
         }
@@ -252,7 +253,10 @@ class MediaPipeFaceAnalyzer:
 
         observations: list[VisionObservation] = []
         for index, landmarks in enumerate(faces):
-            attributes: dict[str, Any] = {"face_index": index}
+            attributes: dict[str, Any] = {
+                "face_index": index,
+                "confidence_source": "presence_unscored",
+            }
             if index < len(blendshape_groups):
                 attributes["blendshapes"] = cls._blendshape_map(
                     list(blendshape_groups[index])
@@ -265,7 +269,7 @@ class MediaPipeFaceAnalyzer:
             observations.append(
                 VisionObservation(
                     kind="face",
-                    confidence=1.0,
+                    confidence=0.5,
                     label="face",
                     bounding_box=cls._bounding_box(list(landmarks)),
                     attributes=attributes,
