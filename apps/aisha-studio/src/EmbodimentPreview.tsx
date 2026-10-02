@@ -21,13 +21,16 @@ export default function EmbodimentPreview({
       className={
         'embodiment-preview activity-' + state.activity
         + ' expression-' + state.expression
+        + ' affect-' + state.affect
         + (compact ? ' compact' : '')
       }
       aria-label={'AISHA is ' + state.activity}
       title={
         'Embodiment state: ' + state.activity
         + ' / ' + state.expression
-        + ' · intensity ' + state.intensity.toFixed(2)
+        + ' · affect ' + state.affect
+        + ' ' + state.affect_intensity.toFixed(2)
+        + ' · activity intensity ' + state.intensity.toFixed(2)
       }
     >
       <div className="embodiment-stage" aria-hidden="true">
@@ -47,13 +50,16 @@ export default function EmbodimentPreview({
         <div className="embodiment-copy">
           <span className="eyebrow">EMBODIMENT PREVIEW</span>
           <strong>{LABELS[state.activity]}</strong>
-          <small>{state.expression} · {Math.round(state.intensity * 100)}%</small>
+          <small>
+            {state.expression} · {Math.round(state.intensity * 100)}% activity
+            {' · '}{state.affect} · {Math.round(state.affect_intensity * 100)}% affect
+          </small>
         </div>
       )}
       {compact && (
         <div className="embodiment-compact-copy">
           <strong>{LABELS[state.activity]}</strong>
-          <span>{state.expression}</span>
+          <span>{state.expression} · {state.affect}</span>
         </div>
       )}
     </div>
