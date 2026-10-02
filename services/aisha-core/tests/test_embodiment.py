@@ -50,8 +50,13 @@ def test_embodiment_director_transitions_are_deterministic():
     assert idle.expression == "neutral"
     assert idle.affect == "amused"
 
+    clamped = director.set_affect("surprised", intensity=2.0)
+    assert clamped.sequence == 5
+    assert clamped.affect == "surprised"
+    assert clamped.affect_intensity == 1.0
+
     cleared = director.clear_affect()
-    assert cleared.sequence == 5
+    assert cleared.sequence == 6
     assert cleared.affect == "neutral"
     assert cleared.affect_intensity == 0.0
 
