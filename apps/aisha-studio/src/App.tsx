@@ -8,8 +8,10 @@ import {
   getMessages,
   getRuns,
   getSessionSettings,
+  setEmbodimentAffect,
   setSessionMemoryMode,
 } from './api';
+import AffectControls from './AffectControls';
 import EmbodimentPreview from './EmbodimentPreview';
 import MemoryPanel from './MemoryPanel';
 import type {
@@ -28,6 +30,8 @@ const DEFAULT_EMBODIMENT: EmbodimentState = {
   activity: 'idle',
   expression: 'neutral',
   intensity: 0.2,
+  affect: 'neutral',
+  affect_intensity: 0,
   updated_at: '',
 };
 
@@ -36,13 +40,19 @@ function embodimentFromPayload(payload: Record<string, unknown>): EmbodimentStat
   const expression = payload.expression;
   const sequence = payload.sequence;
   const intensity = payload.intensity;
+  const affect = payload.affect;
+  const affectIntensity = payload.affect_intensity;
   const updatedAt = payload.updated_at;
 
   if (
     !['idle', 'listening', 'thinking', 'speaking'].includes(String(activity))
     || !['neutral', 'attentive', 'focused', 'engaged'].includes(String(expression))
+    || !['neutral', 'warm', 'amused', 'curious', 'concerned', 'surprised'].includes(
+      String(affect),
+    )
     || typeof sequence !== 'number'
     || typeof intensity !== 'number'
+    || typeof affectIntensity !== 'number'
   ) {
     return null;
   }
@@ -52,6 +62,8 @@ function embodimentFromPayload(payload: Record<string, unknown>): EmbodimentStat
     activity: activity as EmbodimentState['activity'],
     expression: expression as EmbodimentState['expression'],
     intensity,
+    affect: affect as EmbodimentState['affect'],
+    affect_intensity: affectIntensity,
     updated_at: typeof updatedAt === 'string' ? updatedAt : '',
   };
 }
@@ -121,6 +133,7 @@ export default function App() {
   const [creatingSession, setCreatingSession] = useState(false);
   const [memoryMode, setMemoryMode] = useState<'normal' | 'test'>('normal');
   const [updatingMemoryMode, setUpdatingMemoryMode] = useState(false);
+  const [updatingAffect, setUpdatingAffect] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const creatingRef = useRef(false);
@@ -340,6 +353,22 @@ export default function App() {
     }));
   }
 
+  async function changeAffect(
+    affect: EmbodimentState['affect'],
+    intensity: number,
+  ) {
+    if (updatingAffect || connection !== 'online') return;
+    setUpdatingAffect(true);
+    try {
+      setEmbodiment(await setEmbodimentAffect(affect, intensity));
+      setNotice('');
+    } catch {
+      setNotice('Could not update the embodiment affect preview.');
+    } finally {
+      setUpdatingAffect(false);
+    }
+  }
+
   async function toggleMemoryMode() {
     if (!sessionId || busy || updatingMemoryMode) return;
     const next = memoryMode === 'normal' ? 'test' : 'normal';
@@ -506,6 +535,11 @@ export default function App() {
           {messages.length === 0 ? (
             <div className="welcome">
               <EmbodimentPreview state={embodiment} />
+              <AffectControls
+                state={embodiment}
+                disabled={connection !== 'online' || updatingAffect}
+                onChange={(affect, intensity) => void changeAffect(affect, intensity)}
+              />
               <div className="eyebrow welcome-eyebrow">A PLACE TO BEGIN</div>
               <h2>She's here.</h2>
               <p>Start a conversation and watch the development embodiment react to AISHA's live turn state.</p>
