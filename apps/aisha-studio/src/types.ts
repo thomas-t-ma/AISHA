@@ -1,3 +1,11 @@
+export interface EmbodimentState {
+  sequence: number;
+  activity: 'idle' | 'listening' | 'thinking' | 'speaking';
+  expression: 'neutral' | 'attentive' | 'focused' | 'engaged';
+  intensity: number;
+  updated_at: string;
+}
+
 export interface RuntimeHealth {
   status: string;
   profile: string;
@@ -8,6 +16,12 @@ export interface RuntimeHealth {
     preloaded?: boolean;
     wall_clock_ms?: number | null;
     error?: string;
+  };
+  embodiment?: EmbodimentState;
+  perception?: {
+    enabled?: boolean;
+    provider?: string;
+    observation_count?: number;
   };
 }
 
