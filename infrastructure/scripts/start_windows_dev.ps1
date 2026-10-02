@@ -1,10 +1,10 @@
-$ErrorActionPreference = "Stop"
-
 param(
     [ValidateSet("mock", "mac-m2max-96gb", "nvidia-2070", "nvidia-5080", "nvidia-high")]
     [string]$Profile = "mock",
     [switch]$SkipInstall
 )
+
+$ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $Core = Join-Path $RepoRoot "services\aisha-core"
