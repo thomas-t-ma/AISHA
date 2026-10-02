@@ -51,6 +51,7 @@ class DisabledCameraSource:
             "available": False,
             "enabled": False,
             "source": self.name,
+            "raw_frame_scope": "none",
         }
 
 
@@ -82,5 +83,6 @@ class MockCameraSource:
             "available": True,
             "enabled": self._enabled,
             "source": self.name,
+            "raw_frame_scope": "none",
             "queued_frames": len(self._frames),
         }
