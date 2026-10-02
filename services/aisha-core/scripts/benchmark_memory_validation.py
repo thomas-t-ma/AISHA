@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+
+import httpx
 from pathlib import Path
 
 from aisha.memory.pipeline_benchmark import run_pipeline_case, summarize_pipeline_results
@@ -23,7 +25,10 @@ from aisha.settings import Settings
 
 
 ALLOWED_PROFILES = {"mac-m2max-96gb", "nvidia-5080"}
-FROZEN_GATE_MODEL = "qwen3.5:35b-mlx"
+FROZEN_GATE_MODELS = {
+    "mac-m2max-96gb": "qwen3.5:35b-mlx",
+    "nvidia-5080": "qwen3.5:35b",
+}
 FROZEN_EMBEDDING_MODEL = "qwen3-embedding:4b"
 FROZEN_GATE_VERSION = "personal-continuity-v10.2-source-grounded-anchors"
 FROZEN_PIPELINE_VERSION = "hybrid-final-gate-v10.2-source-grounded-anchors"
@@ -72,9 +77,10 @@ def assert_frozen_configuration(profile, *, profile_name: str) -> None:
             f"pipeline version {SEMANTIC_PIPELINE_VERSION!r} "
             f"!= {FROZEN_PIPELINE_VERSION!r}"
         )
-    if profile.llm.model != FROZEN_GATE_MODEL:
+    expected_gate_model = FROZEN_GATE_MODELS[profile_name]
+    if profile.llm.model != expected_gate_model:
         problems.append(
-            f"gate model {profile.llm.model!r} != {FROZEN_GATE_MODEL!r}"
+            f"gate model {profile.llm.model!r} != {expected_gate_model!r}"
         )
     if profile.memory.embedding_model != FROZEN_EMBEDDING_MODEL:
         problems.append(
@@ -90,9 +96,41 @@ def assert_frozen_configuration(profile, *, profile_name: str) -> None:
         )
 
 
+async def assert_ollama_ready(profile) -> None:
+    base_url = (profile.llm.base_url or "").rstrip("/")
+    if not base_url:
+        raise SystemExit("Selected profile has no Ollama base URL.")
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{base_url}/api/tags")
+            response.raise_for_status()
+            payload = response.json()
+    except Exception as exc:
+        raise SystemExit(
+            "Ollama is not reachable at "
+            f"{base_url}. Start Ollama before running the holdout. "
+            f"Underlying error: {type(exc).__name__}: {exc}"
+        ) from exc
+
+    installed = {
+        str(row.get("name") or row.get("model") or "")
+        for row in payload.get("models", [])
+        if isinstance(row, dict)
+    }
+    required = {str(profile.llm.model), FROZEN_EMBEDDING_MODEL}
+    missing = sorted(model for model in required if model not in installed)
+    if missing:
+        commands = "\n".join(f"  ollama pull {model}" for model in missing)
+        raise SystemExit(
+            "Ollama is running, but required validation models are missing:\n"
+            f"{commands}"
+        )
+
+
 def build_retriever(profile) -> OllamaSemanticMemoryRetriever:
     gate = OllamaMemoryRelevanceGate(
-        model=FROZEN_GATE_MODEL,
+        model=profile.llm.model,
         base_url=profile.memory.semantic_relevance_base_url or profile.llm.base_url,
         keep_alive=(
             profile.memory.semantic_relevance_keep_alive
@@ -242,6 +280,7 @@ async def main() -> None:
 
     beliefs = validation_beliefs()
     cases = validation_cases()
+    await assert_ollama_ready(profile)
     retriever = build_retriever(profile)
 
     print(
@@ -253,7 +292,7 @@ async def main() -> None:
         f"Lexical limit: {FROZEN_LEXICAL_LIMIT} · "
         f"Semantic candidate limit: {FROZEN_CANDIDATE_LIMIT} · "
         f"Final limit: {FROZEN_TOTAL_LIMIT}\n"
-        f"Gate: {FROZEN_GATE_MODEL}\n"
+        f"Gate: {profile.llm.model}\n"
         f"Gate version: {FROZEN_GATE_VERSION}\n"
         f"Pipeline version: {FROZEN_PIPELINE_VERSION}\n"
         "IMPORTANT: treat this as holdout evaluation, not tuning data."
@@ -281,7 +320,7 @@ async def main() -> None:
         "suite_version": VALIDATION_SUITE_VERSION,
         "frozen_configuration": {
             "profile": args.profile,
-            "gate_model": FROZEN_GATE_MODEL,
+            "gate_model": profile.llm.model,
             "embedding_model": FROZEN_EMBEDDING_MODEL,
             "gate_version": FROZEN_GATE_VERSION,
             "pipeline_version": FROZEN_PIPELINE_VERSION,
