@@ -116,6 +116,25 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert embodiment.status_code == 200
         assert embodiment.json()["activity"] == "idle"
         assert embodiment.json()["expression"] == "neutral"
+        assert embodiment.json()["affect"] == "neutral"
+        assert embodiment.json()["affect_intensity"] == 0.0
+
+        affected = client.post(
+            "/v1/embodiment/affect",
+            json={"affect": "amused", "intensity": 0.35},
+            headers={"origin": "http://127.0.0.1:5173"},
+        )
+        assert affected.status_code == 200
+        assert affected.json()["activity"] == "idle"
+        assert affected.json()["affect"] == "amused"
+        assert affected.json()["affect_intensity"] == 0.35
+
+        rejected_affect = client.post(
+            "/v1/embodiment/affect",
+            json={"affect": "amused", "intensity": 0.5},
+            headers={"origin": "https://unrelated.example"},
+        )
+        assert rejected_affect.status_code == 403
 
         perception = client.get("/v1/perception/status")
         assert perception.status_code == 200
@@ -130,4 +149,5 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         health = client.get("/v1/health")
         assert health.status_code == 200
         assert health.json()["embodiment"]["activity"] == "idle"
+        assert health.json()["embodiment"]["affect"] == "amused"
         assert health.json()["perception"]["enabled"] is False
