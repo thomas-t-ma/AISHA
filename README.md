@@ -116,6 +116,38 @@ database remains the source of truth.
 This is a development UI; keep both servers on `127.0.0.1`. Authentication,
 LAN access, audio and avatar rendering are not included yet.
 
+## Windows development
+
+On Windows, use the checked-in bootstrap and launcher rather than manually
+initializing fnm, Node, npm, the Python venv, and two development servers in
+separate shells.
+
+One-time machine bootstrap from the repository root:
+
+```powershell
+.\infrastructure\scripts\bootstrap_windows.ps1
+```
+
+Normal development startup after that:
+
+```powershell
+.\Start-AISHA.ps1
+```
+
+The launcher resolves `fnm.exe` directly (including WinGet package installs),
+evaluates `fnm env` itself, selects the Studio version in `.node-version`, and
+starts Core plus Studio in separate PowerShell windows. It does not depend on
+whether the invoking terminal happened to load an fnm PowerShell profile.
+
+Use another runtime profile when needed:
+
+```powershell
+.\Start-AISHA.ps1 -Profile nvidia-5080
+```
+
+The default is `mock`, which is preferred for UI, embodiment, and deterministic
+development that does not require a local LLM.
+
 ## Moving between machines
 
 GitHub is the source of truth for AISHA code.
