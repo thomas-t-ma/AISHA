@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from time import perf_counter
 
 from aisha.character.loader import PersonaPackage
@@ -16,6 +16,8 @@ from aisha.memory.quotes import original_source_quote
 from aisha.memory.reflector import OllamaReflector
 from aisha.memory.retrieval import explain_relevant_beliefs
 from aisha.memory.semantic import OllamaSemanticMemoryRetriever
+from aisha.perception.base import PerceptionSummary
+from aisha.perception.policy import PerceptionPromptPolicy
 from aisha.providers.base import AISHAProviderError
 from aisha.storage.database import AISHAStore
 
@@ -34,6 +36,8 @@ class AISHAOrchestrator:
         evidence_verifier: OllamaEvidenceVerifier | None = None,
         semantic_retriever: OllamaSemanticMemoryRetriever | None = None,
         embodiment_director: EmbodimentDirector | None = None,
+        perception_summary_provider: Callable[[], PerceptionSummary] | None = None,
+        perception_policy: PerceptionPromptPolicy | None = None,
     ) -> None:
         self.store = store
         self.persona = persona
@@ -43,6 +47,8 @@ class AISHAOrchestrator:
         self.evidence_verifier = evidence_verifier
         self.semantic_retriever = semantic_retriever
         self.embodiment_director = embodiment_director or EmbodimentDirector()
+        self.perception_summary_provider = perception_summary_provider
+        self.perception_policy = perception_policy or PerceptionPromptPolicy()
         self._reflections: set[asyncio.Task[None]] = set()
         self._last_reflection_error: str | None = None
         self._last_reflection_result: dict | None = None
@@ -402,6 +408,13 @@ class AISHAOrchestrator:
                     "naturally, but do not interrogate the user."
                     "\n" + "\n".join(f"- {line}" for line in learned_lines)
                 )
+
+        if self.perception_summary_provider is not None:
+            perception_context = self.perception_policy.render(
+                self.perception_summary_provider()
+            )
+            if perception_context:
+                system_prompt += perception_context
 
         user_message = Message(role="user", text=text)
         await self.store.add_message(session_id, user_message)
