@@ -69,6 +69,7 @@ class PerceptionRuntime:
             return
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+        self.analyzer.close()
 
     def status(self) -> dict[str, Any]:
         task = self._task
