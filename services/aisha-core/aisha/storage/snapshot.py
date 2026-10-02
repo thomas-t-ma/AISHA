@@ -13,7 +13,6 @@ from pathlib import Path
 from aisha.memory.ledger import ExperienceLedger
 from aisha.storage.database import AISHAStore
 
-
 SNAPSHOT_FORMAT_VERSION = 1
 DATABASE_MEMBER = "aisha.sqlite3"
 MANIFEST_MEMBER = "manifest.json"
