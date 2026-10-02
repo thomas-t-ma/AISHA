@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from aisha.perception.base import VisionFrame, VisionProvider
+from aisha.perception.base import PerceptionSummary, VisionFrame, VisionProvider
 
 
 class PerceptionHub:
@@ -26,6 +26,32 @@ class PerceptionHub:
 
     def clear(self) -> None:
         self._latest = None
+
+    def summary(self) -> PerceptionSummary:
+        latest = self._latest
+        if latest is None:
+            return PerceptionSummary()
+
+        reliable = [
+            observation
+            for observation in latest.observations
+            if observation.confidence >= 0.5
+        ]
+        people = [observation for observation in reliable if observation.kind == "person"]
+        gaze_toward_camera = any(
+            observation.kind == "gaze"
+            and observation.label == "toward_camera"
+            for observation in reliable
+        )
+        return PerceptionSummary(
+            frame_id=latest.frame_id,
+            source_id=latest.source_id,
+            person_present=bool(people),
+            person_count=len(people),
+            gaze_toward_camera=gaze_toward_camera,
+            observation_kinds=sorted({observation.kind for observation in reliable}),
+            captured_at=latest.captured_at,
+        )
 
     def status(self) -> dict[str, Any]:
         provider_status = self.provider.status()
