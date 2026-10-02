@@ -43,16 +43,13 @@ class PerceptionRuntime:
         return self.hub.accept(frame)
 
     async def _run(self) -> None:
-        try:
-            while True:
-                if self.camera.status().get("enabled", False):
-                    try:
-                        await self.step()
-                    except Exception as exc:  # provider boundary; keep runtime alive
-                        self._last_error = str(exc)
-                await asyncio.sleep(self.poll_interval_seconds)
-        except asyncio.CancelledError:
-            raise
+        while True:
+            if self.camera.status().get("enabled", False):
+                try:
+                    await self.step()
+                except Exception as exc:  # noqa: BLE001 - keep provider loop alive
+                    self._last_error = str(exc)
+            await asyncio.sleep(self.poll_interval_seconds)
 
     def start(self) -> None:
         if self._task is not None and not self._task.done():
