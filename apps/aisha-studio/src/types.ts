@@ -8,6 +8,16 @@ export interface EmbodimentState {
   updated_at: string;
 }
 
+export interface PerceptionSummary {
+  frame_id: string | null;
+  source_id: string | null;
+  person_present: boolean;
+  person_count: number;
+  gaze_toward_camera: boolean;
+  observation_kinds: string[];
+  captured_at: string | null;
+}
+
 export interface CameraStatus {
   available: boolean;
   enabled: boolean;
