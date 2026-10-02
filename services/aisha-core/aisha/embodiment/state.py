@@ -7,15 +7,31 @@ from pydantic import BaseModel, Field
 
 EmbodimentActivity = Literal["idle", "listening", "thinking", "speaking"]
 ExpressionIntent = Literal["neutral", "attentive", "focused", "engaged"]
+AffectIntent = Literal[
+    "neutral",
+    "warm",
+    "amused",
+    "curious",
+    "concerned",
+    "surprised",
+]
 
 
 class EmbodimentState(BaseModel):
-    """Renderer-independent semantic state for AISHA's visible body."""
+    """Renderer-independent semantic state for AISHA's visible body.
+
+    Activity describes what AISHA is doing. Affect describes the emotional
+    coloring applied independently of that activity. The expression and
+    intensity fields remain activity-derived compatibility hints for current
+    renderers while the renderer contract migrates to explicit blending.
+    """
 
     sequence: int = Field(ge=0)
     activity: EmbodimentActivity
     expression: ExpressionIntent
     intensity: float = Field(ge=0.0, le=1.0)
+    affect: AffectIntent = "neutral"
+    affect_intensity: float = Field(default=0.0, ge=0.0, le=1.0)
     updated_at: datetime
 
 
@@ -28,12 +44,7 @@ _ACTIVITY_STYLE: dict[EmbodimentActivity, tuple[ExpressionIntent, float]] = {
 
 
 class EmbodimentDirector:
-    """Deterministic lifecycle-to-expression mapper.
-
-    Core emits semantic intent only. A future Unity/Three.js/Live2D renderer
-    decides how these intents map to blendshapes, animation clips, gaze, and
-    procedural motion.
-    """
+    """Deterministic semantic-state director."""
 
     def __init__(self) -> None:
         self._state = EmbodimentState(
@@ -41,6 +52,8 @@ class EmbodimentDirector:
             activity="idle",
             expression="neutral",
             intensity=0.20,
+            affect="neutral",
+            affect_intensity=0.0,
             updated_at=datetime.now(UTC),
         )
 
@@ -57,6 +70,34 @@ class EmbodimentDirector:
             activity=activity,
             expression=expression,
             intensity=intensity,
+            affect=self._state.affect,
+            affect_intensity=self._state.affect_intensity,
             updated_at=datetime.now(UTC),
         )
         return self.snapshot()
+
+    def set_affect(
+        self,
+        affect: AffectIntent,
+        *,
+        intensity: float = 0.5,
+    ) -> EmbodimentState:
+        normalized_intensity = 0.0 if affect == "neutral" else intensity
+        if (
+            affect == self._state.affect
+            and normalized_intensity == self._state.affect_intensity
+        ):
+            return self.snapshot()
+
+        self._state = self._state.model_copy(
+            update={
+                "sequence": self._state.sequence + 1,
+                "affect": affect,
+                "affect_intensity": normalized_intensity,
+                "updated_at": datetime.now(UTC),
+            }
+        )
+        return self.snapshot()
+
+    def clear_affect(self) -> EmbodimentState:
+        return self.set_affect("neutral", intensity=0.0)
