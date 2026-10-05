@@ -7,6 +7,9 @@ import type { EmbodimentState, PerceptionSummary } from './types';
 interface EmbodimentPreviewProps {
   state: EmbodimentState;
   perception?: PerceptionSummary | null;
+  voiceLevel?: number;
+  voicing?: boolean;
+  audioOutputEnabled?: boolean;
   compact?: boolean;
 }
 
@@ -56,6 +59,9 @@ function gazeBias(
 export default function EmbodimentPreview({
   state,
   perception = null,
+  voiceLevel = 0,
+  voicing = false,
+  audioOutputEnabled = false,
   compact = false,
 }: EmbodimentPreviewProps) {
   const renderer = toRendererInput(state, perception);
@@ -174,6 +180,7 @@ export default function EmbodimentPreview({
     '--head-x': head.x.toFixed(2) + 'px',
     '--head-y': head.y.toFixed(2) + 'px',
     '--head-tilt': head.tilt.toFixed(2) + 'deg',
+    '--voice-level': Math.min(1, Math.max(0, voiceLevel)).toFixed(3),
   } as CSSProperties;
 
   return (
@@ -183,6 +190,8 @@ export default function EmbodimentPreview({
         + ' expression-' + renderer.activityIntent
         + ' affect-' + renderer.affect
         + (blinking ? ' is-blinking' : '')
+        + (voicing ? ' is-voicing' : '')
+        + (audioOutputEnabled ? ' speech-output-enabled' : '')
         + (compact ? ' compact' : '')
       }
       style={proceduralStyle}
@@ -198,6 +207,7 @@ export default function EmbodimentPreview({
           ? ' @ ' + renderer.viewerPosition.x.toFixed(2)
             + ',' + renderer.viewerPosition.y.toFixed(2)
           : '')
+        + (voicing ? ' · voice ' + Math.round(voiceLevel * 100) + '%' : '')
       }
     >
       <div className="embodiment-stage" aria-hidden="true">
