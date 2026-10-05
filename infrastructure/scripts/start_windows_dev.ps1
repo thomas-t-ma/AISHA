@@ -2,6 +2,7 @@ param(
     [ValidateSet("mock", "mac-m2max-96gb", "nvidia-2070", "nvidia-5080", "nvidia-high")]
     [string]$Profile = "mock",
     [switch]$Vision,
+    [switch]$Voice,
     [switch]$SkipInstall
 )
 
@@ -67,6 +68,38 @@ if ($Vision) {
     }
 }
 
+if ($Voice) {
+    Push-Location $Core
+    try {
+        & $Python -c "import kokoro_onnx, soundfile" 2>$null
+        $voicePackagesReady = $LASTEXITCODE -eq 0
+
+        if (-not $voicePackagesReady) {
+            if ($SkipInstall) {
+                throw "Voice packages are missing. Run without -SkipInstall once."
+            }
+            Write-Host "Installing optional AISHA local voice dependencies..."
+            & $Python -m pip install -e ".[voice-local]"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not install AISHA local voice dependencies."
+            }
+        }
+
+        if ($SkipInstall) {
+            & $Python scripts\setup_local_voice.py
+        }
+        else {
+            & $Python scripts\setup_local_voice.py --download-models
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "AISHA local voice setup is incomplete."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 $Fnm = Resolve-Fnm
 $NodeVersion = (Get-Content $NodeVersionFile -Raw).Trim()
 
@@ -101,10 +134,17 @@ $VisionEnvironment = if ($Vision) {
 else {
     ""
 }
+$VoiceEnvironment = if ($Voice) {
+    "`$env:AISHA_TTS_PROVIDER = 'local-kokoro'"
+}
+else {
+    ""
+}
 
 $BackendCommand = @"
 `$env:AISHA_PROFILE = '$Profile'
 $VisionEnvironment
+$VoiceEnvironment
 Set-Location '$Core'
 & '$Python' -m uvicorn aisha.main:app --reload --host 127.0.0.1 --port 8000
 "@
@@ -118,7 +158,8 @@ Set-Location '$Studio'
 
 Write-Host ""
 $VisionLabel = if ($Vision) { "local vision enabled" } else { "vision disabled" }
-Write-Host "Starting AISHA Core ($Profile, $VisionLabel) and AISHA Studio..."
+$VoiceLabel = if ($Voice) { "local voice enabled" } else { "voice disabled" }
+Write-Host "Starting AISHA Core ($Profile, $VisionLabel, $VoiceLabel) and AISHA Studio..."
 Write-Host "Studio: http://127.0.0.1:5173"
 Write-Host ""
 
