@@ -28,7 +28,7 @@ export default function AffectControls({
   return (
     <div className="affect-controls">
       <div className="affect-control-head">
-        <span className="eyebrow">AFFECT DEBUG</span>
+        <span className="eyebrow">AFFECT DEBUG · 4S PULSE</span>
         <span>{state.affect} · {intensity}%</span>
       </div>
       <div className="affect-buttons" role="group" aria-label="Affect preview">

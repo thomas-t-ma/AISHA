@@ -65,6 +65,7 @@ class CameraStateWrite(BaseModel):
 class EmbodimentAffectWrite(BaseModel):
     affect: AffectIntent
     intensity: float = Field(default=0.5, ge=0.0, le=1.0)
+    duration_seconds: float | None = Field(default=None, ge=0.25, le=30.0)
 
 
 @router.get("/health")
@@ -328,6 +329,7 @@ async def set_embodiment_affect(
     return request.app.state.aisha["orchestrator"].set_embodiment_affect(
         update.affect,
         intensity=update.intensity,
+        duration_seconds=update.duration_seconds,
     )
 
 

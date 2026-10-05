@@ -58,11 +58,16 @@ export function setCameraEnabled(enabled: boolean): Promise<CameraStatus> {
 export function setEmbodimentAffect(
   affect: EmbodimentState['affect'],
   intensity: number,
+  durationSeconds: number | null = affect === 'neutral' ? null : 4,
 ): Promise<EmbodimentState> {
   return json<EmbodimentState>('/v1/embodiment/affect', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ affect, intensity }),
+    body: JSON.stringify({
+      affect,
+      intensity,
+      duration_seconds: durationSeconds,
+    }),
   });
 }
 

@@ -24,6 +24,7 @@ def test_body_state_exposes_only_renderer_safe_contract(tmp_path, monkeypatch):
         "intensity",
         "affect",
         "affect_intensity",
+        "affect_expires_at",
         "updated_at",
     }
     assert set(payload["perception"]) == {

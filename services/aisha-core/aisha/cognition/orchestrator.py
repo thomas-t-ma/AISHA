@@ -82,10 +82,12 @@ class AISHAOrchestrator:
         affect: AffectIntent,
         *,
         intensity: float = 0.5,
+        duration_seconds: float | None = None,
     ) -> dict:
         state = self.embodiment_director.set_affect(
             affect,
             intensity=intensity,
+            duration_seconds=duration_seconds,
         )
         return state.model_dump(mode="json")
 

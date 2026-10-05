@@ -39,6 +39,7 @@ const DEFAULT_EMBODIMENT: EmbodimentState = {
   intensity: 0.2,
   affect: 'neutral',
   affect_intensity: 0,
+  affect_expires_at: null,
   updated_at: '',
 };
 
@@ -49,6 +50,7 @@ function embodimentFromPayload(payload: Record<string, unknown>): EmbodimentStat
   const intensity = payload.intensity;
   const affect = payload.affect;
   const affectIntensity = payload.affect_intensity;
+  const affectExpiresAt = payload.affect_expires_at;
   const updatedAt = payload.updated_at;
 
   if (
@@ -71,6 +73,7 @@ function embodimentFromPayload(payload: Record<string, unknown>): EmbodimentStat
     intensity,
     affect: affect as EmbodimentState['affect'],
     affect_intensity: affectIntensity,
+    affect_expires_at: typeof affectExpiresAt === 'string' ? affectExpiresAt : null,
     updated_at: typeof updatedAt === 'string' ? updatedAt : '',
   };
 }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 
 from aisha.character.loader import load_persona
@@ -20,6 +22,7 @@ def test_embodiment_director_transitions_are_deterministic():
     assert initial.intensity == 0.20
     assert initial.affect == "neutral"
     assert initial.affect_intensity == 0.0
+    assert initial.affect_expires_at is None
 
     thinking = director.transition("thinking")
     assert thinking.sequence == 1
@@ -122,3 +125,53 @@ def test_orchestrator_affect_control_is_independent_of_activity(tmp_path):
     speaking = orchestrator.embodiment_director.transition("speaking")
     assert speaking.activity == "speaking"
     assert speaking.affect == "curious"
+
+
+
+def test_affect_cue_expires_without_changing_activity():
+    now = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
+    clock = {"now": now}
+    director = EmbodimentDirector(now_provider=lambda: clock["now"])
+
+    director.transition("thinking")
+    cue = director.set_affect(
+        "amused",
+        intensity=0.7,
+        duration_seconds=2.0,
+    )
+    assert cue.activity == "thinking"
+    assert cue.affect == "amused"
+    assert cue.affect_intensity == 0.7
+    assert cue.affect_expires_at == now + timedelta(seconds=2)
+
+    clock["now"] = now + timedelta(seconds=1.99)
+    active = director.snapshot()
+    assert active.affect == "amused"
+    assert active.activity == "thinking"
+
+    clock["now"] = now + timedelta(seconds=2)
+    expired = director.snapshot()
+    assert expired.affect == "neutral"
+    assert expired.affect_intensity == 0.0
+    assert expired.affect_expires_at is None
+    assert expired.activity == "thinking"
+    assert expired.expression == "focused"
+
+
+def test_affect_cue_duration_is_bounded_in_director():
+    now = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
+    director = EmbodimentDirector(now_provider=lambda: now)
+
+    short = director.set_affect(
+        "warm",
+        intensity=0.4,
+        duration_seconds=0.01,
+    )
+    assert short.affect_expires_at == now + timedelta(seconds=0.25)
+
+    long = director.set_affect(
+        "curious",
+        intensity=0.4,
+        duration_seconds=500,
+    )
+    assert long.affect_expires_at == now + timedelta(seconds=30)

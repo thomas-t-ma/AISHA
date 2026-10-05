@@ -5,6 +5,7 @@ export interface EmbodimentState {
   intensity: number;
   affect: 'neutral' | 'warm' | 'amused' | 'curious' | 'concerned' | 'surprised';
   affect_intensity: number;
+  affect_expires_at: string | null;
   updated_at: string;
 }
 

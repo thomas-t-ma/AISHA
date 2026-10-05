@@ -11,6 +11,7 @@ const DEFAULT_STATE: EmbodimentState = {
   intensity: 0.2,
   affect: 'neutral',
   affect_intensity: 0,
+  affect_expires_at: null,
   updated_at: '',
 };
 
