@@ -26,6 +26,7 @@ class FasterWhisperSTTProvider:
         language: str | None = "en",
         beam_size: int = 3,
         vad_filter: bool = True,
+        local_files_only: bool = True,
     ) -> None:
         self.model = model
         self.download_root = download_root.expanduser().resolve()
@@ -34,6 +35,7 @@ class FasterWhisperSTTProvider:
         self.language = language
         self.beam_size = beam_size
         self.vad_filter = vad_filter
+        self.local_files_only = local_files_only
         self._engine: Any | None = None
         self._last_error: str | None = None
 
@@ -52,6 +54,7 @@ class FasterWhisperSTTProvider:
             device=self.device,
             compute_type=self.compute_type,
             download_root=str(self.download_root),
+            local_files_only=self.local_files_only,
         )
         return self._engine
 
@@ -121,6 +124,7 @@ class FasterWhisperSTTProvider:
             "language": self.language,
             "beam_size": self.beam_size,
             "vad_filter": self.vad_filter,
+            "local_files_only": self.local_files_only,
             "dependency_available": self._dependency_available(),
             "download_root": str(self.download_root),
             "loaded": self._engine is not None,
