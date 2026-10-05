@@ -43,6 +43,21 @@ class MemoryProfile(BaseModel):
     )
 
 
+class STTProfile(BaseModel):
+    provider: Literal["disabled", "local-faster-whisper"] = "disabled"
+    model: str = "small.en"
+    device: Literal["cpu", "cuda"] = "cpu"
+    compute_type: str = "int8"
+    language: str | None = "en"
+    beam_size: int = Field(default=3, ge=1, le=10)
+    vad_filter: bool = True
+    max_audio_bytes: int = Field(
+        default=12 * 1024 * 1024,
+        ge=64 * 1024,
+        le=128 * 1024 * 1024,
+    )
+
+
 class TTSProfile(BaseModel):
     provider: Literal["disabled", "local-kokoro"] = "disabled"
     voice: str = "af_heart"
@@ -67,7 +82,7 @@ class RuntimeProfile(BaseModel):
     compute: dict[str, Any]
     llm: LLMProfile
     memory: MemoryProfile = Field(default_factory=MemoryProfile)
-    stt: dict[str, Any] = Field(default_factory=dict)
+    stt: STTProfile = Field(default_factory=STTProfile)
     tts: TTSProfile = Field(default_factory=TTSProfile)
     vision: VisionProfile = Field(default_factory=VisionProfile)
     notes: str | None = None
@@ -89,6 +104,11 @@ class Settings(BaseSettings):
     aisha_llm_api_key: str | None = None
     aisha_llm_think: bool | Literal["low", "medium", "high", "max"] | None = None
     aisha_llm_keep_alive: str | int | None = None
+
+    aisha_stt_provider: Literal["disabled", "local-faster-whisper"] | None = None
+    aisha_stt_model: str | None = None
+    aisha_stt_device: Literal["cpu", "cuda"] | None = None
+    aisha_stt_compute_type: str | None = None
 
     aisha_tts_provider: Literal["disabled", "local-kokoro"] | None = None
     aisha_tts_voice: str | None = None
@@ -127,6 +147,14 @@ class Settings(BaseSettings):
             profile.llm.think = self.aisha_llm_think
         if self.aisha_llm_keep_alive is not None:
             profile.llm.keep_alive = self.aisha_llm_keep_alive
+        if self.aisha_stt_provider is not None:
+            profile.stt.provider = self.aisha_stt_provider
+        if self.aisha_stt_model is not None:
+            profile.stt.model = self.aisha_stt_model
+        if self.aisha_stt_device is not None:
+            profile.stt.device = self.aisha_stt_device
+        if self.aisha_stt_compute_type is not None:
+            profile.stt.compute_type = self.aisha_stt_compute_type
         if self.aisha_tts_provider is not None:
             profile.tts.provider = self.aisha_tts_provider
         if self.aisha_tts_voice is not None:
