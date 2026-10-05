@@ -35,17 +35,25 @@ def test_perception_prompt_policy_whitelists_only_transient_facts():
         person_present=True,
         person_count=2,
         gaze_toward_camera=True,
-        observation_kinds=["face", "gaze"],
+        head_approximately_frontal=True,
+        head_frontal_score=0.97,
+        primary_person_x=0.73,
+        primary_person_y=0.42,
+        observation_kinds=["face", "gaze", "head_pose"],
     )
 
     context = PerceptionPromptPolicy().render(summary)
 
     assert context is not None
     assert "2 people currently visible" in context
+    assert "approximately oriented toward the camera" in context
     assert "toward_camera" in context
     assert "frame_secret" not in context
     assert "camera_secret" not in context
-    assert "face" not in context
+    assert "0.73" not in context
+    assert "0.42" not in context
+    assert "0.97" not in context
+    assert "head_pose" not in context
     assert "not user-authored memory" in context
     assert "unobserved traits" in context
 
