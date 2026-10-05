@@ -101,6 +101,10 @@ jobs:
       - name: Import vision dependencies
         run: |
           python -c "import cv2, mediapipe; print('opencv', cv2.__version__); print('mediapipe', mediapipe.__version__)"
+      - name: Download and validate official vision models
+        run: |
+          $env:AISHA_DATA_DIR = Join-Path $env:RUNNER_TEMP "aisha-vision-data"
+          python scripts/setup_local_vision.py --download-model
 
 
   voice-deps:
