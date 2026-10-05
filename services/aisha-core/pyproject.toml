@@ -26,6 +26,9 @@ voice-local = [
   "kokoro-onnx>=0.6.1,<1",
   "soundfile>=0.13,<1",
 ]
+stt-local = [
+  "faster-whisper>=1.2.1,<2",
+]
 mac-memory = [
   "mlx-lm==0.31.3",
 ]
