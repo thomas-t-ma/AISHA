@@ -43,6 +43,10 @@ def test_vision_profile_defaults_disabled():
     assert profile.vision.poll_interval_seconds == 0.5
     assert profile.vision.num_faces == 2
     assert profile.vision.model_path is None
+    assert profile.vision.object_detection is True
+    assert profile.vision.object_model_path is None
+    assert profile.vision.object_score_threshold == 0.45
+    assert profile.vision.object_max_results == 8
 
 
 def test_vision_profile_environment_overrides():
@@ -51,12 +55,16 @@ def test_vision_profile_environment_overrides():
         aisha_vision_provider="local-mediapipe",
         aisha_vision_camera_index=2,
         aisha_vision_model_path="models/custom_face_landmarker.task",
+        aisha_vision_object_detection=False,
+        aisha_vision_object_model_path="models/custom_objects.tflite",
     )
     profile = settings.load_profile()
 
     assert profile.vision.provider == "local-mediapipe"
     assert profile.vision.camera_index == 2
     assert profile.vision.model_path == "models/custom_face_landmarker.task"
+    assert profile.vision.object_detection is False
+    assert profile.vision.object_model_path == "models/custom_objects.tflite"
 
 
 
