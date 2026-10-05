@@ -1,4 +1,4 @@
-import type { AISHAEvent, AutomaticMemoryStatus, BeliefVersion, CameraStatus, EmbodimentState, LearnedBelief, MemoryRecord, ModelRun, PerceptionSummary, RuntimeHealth, StoredMessage } from './types';
+import type { AISHAEvent, AutomaticMemoryStatus, BeliefVersion, CameraStatus, EmbodimentState, LearnedBelief, MemoryRecord, ModelRun, PerceptionSummary, RuntimeHealth, StoredMessage, TranscriptionResult, TranscriptionStatus } from './types';
 
 async function json<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, options);
@@ -8,6 +8,31 @@ async function json<T>(url: string, options?: RequestInit): Promise<T> {
 
 export function getHealth(): Promise<RuntimeHealth> {
   return json<RuntimeHealth>('/v1/health');
+}
+
+export function getTranscriptionStatus(): Promise<TranscriptionStatus> {
+  return json<TranscriptionStatus>('/v1/transcription/status');
+}
+
+export async function transcribeAudio(audio: Blob): Promise<TranscriptionResult> {
+  const response = await fetch('/v1/audio/transcribe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': audio.type || 'audio/webm',
+    },
+    body: audio,
+  });
+  if (!response.ok) {
+    let detail = 'AISHA Core returned HTTP ' + response.status;
+    try {
+      const body = await response.json() as { detail?: unknown };
+      if (typeof body.detail === 'string') detail = body.detail;
+    } catch {
+      // Keep the HTTP fallback when Core did not return JSON.
+    }
+    throw new Error(detail);
+  }
+  return response.json() as Promise<TranscriptionResult>;
 }
 
 export function getEmbodimentState(): Promise<EmbodimentState> {
