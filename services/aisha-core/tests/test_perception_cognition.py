@@ -47,7 +47,8 @@ def test_perception_prompt_policy_whitelists_only_observable_summary_facts():
         head_frontal_score=0.91,
         primary_person_x=0.73,
         primary_person_y=0.44,
-        observation_kinds=["face", "gaze"],
+        observation_kinds=["face", "gaze", "object"],
+        visible_objects=["cup", "laptop", "book"],
     )
 
     rendered = PerceptionPromptPolicy().render(summary)
@@ -56,6 +57,7 @@ def test_perception_prompt_policy_whitelists_only_observable_summary_facts():
     assert "2 people currently visible to the local camera." in rendered
     assert "approximately oriented toward the camera" in rendered
     assert "toward_camera" in rendered
+    assert "Visible nearby objects include: cup, laptop, book." in rendered
 
     # Metadata, coordinates, scores, and provider internals are not cognition input.
     for forbidden in (
@@ -104,7 +106,8 @@ async def test_transient_perception_reaches_model_but_not_messages_or_memory(tmp
         head_frontal_score=0.88,
         primary_person_x=0.51,
         primary_person_y=0.49,
-        observation_kinds=["face"],
+        observation_kinds=["face", "object"],
+        visible_objects=["cup", "laptop"],
     )
 
     orchestrator = AISHAOrchestrator(
@@ -127,6 +130,7 @@ async def test_transient_perception_reaches_model_but_not_messages_or_memory(tmp
     context = provider.contexts[-1]
     assert "1 person currently visible to the local camera." in context.system_prompt
     assert "approximately oriented toward the camera" in context.system_prompt
+    assert "Visible nearby objects include: cup, laptop." in context.system_prompt
 
     forbidden = (
         "frame_DO_NOT_PERSIST",
@@ -148,6 +152,7 @@ async def test_transient_perception_reaches_model_but_not_messages_or_memory(tmp
     assert "visible to the local camera" not in serialized_messages
     assert "frame_DO_NOT_PERSIST" not in serialized_messages
     assert "camera_DO_NOT_PERSIST" not in serialized_messages
+    assert "Visible nearby objects" not in serialized_messages
 
     episodes = await ledger.list_episodes()
     assert len(episodes) == 1
@@ -157,6 +162,7 @@ async def test_transient_perception_reaches_model_but_not_messages_or_memory(tmp
     assert "visible to the local camera" not in episode_text
     assert "frame_DO_NOT_PERSIST" not in episode_text
     assert "camera_DO_NOT_PERSIST" not in episode_text
+    assert "Visible nearby objects" not in episode_text
 
     event_text = "\n".join(event.model_dump_json() for event in events)
     assert "frame_DO_NOT_PERSIST" not in event_text
