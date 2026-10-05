@@ -8,6 +8,7 @@ export interface RendererInput {
   affect: EmbodimentState['affect'];
   affectIntensity: number;
   attentionTarget: 'viewer' | 'ambient';
+  viewerPosition: { x: number; y: number } | null;
 }
 
 export interface EmbodimentRendererAdapter {
@@ -28,5 +29,12 @@ export function toRendererInput(
     affect: state.affect,
     affectIntensity: state.affect_intensity,
     attentionTarget: perception?.person_present ? 'viewer' : 'ambient',
+    viewerPosition: (
+      perception?.person_present
+      && perception.primary_person_x != null
+      && perception.primary_person_y != null
+    )
+      ? { x: perception.primary_person_x, y: perception.primary_person_y }
+      : null,
   };
 }
