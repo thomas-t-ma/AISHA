@@ -241,6 +241,44 @@ class MediaPipeFaceAnalyzer:
             return [float(value) for value in data]
         return None
 
+    @staticmethod
+    def _frontal_score(
+        matrix: list[float] | list[list[float]] | None,
+    ) -> float | None:
+        """Return camera-axis alignment of the canonical face forward axis.
+
+        The score is geometric, not a probability. It is invariant to a uniform
+        scale in MediaPipe's facial transform and deliberately ignores sign so it
+        does not depend on camera/canonical Z-axis direction conventions.
+        """
+
+        if matrix is None:
+            return None
+
+        rows: list[list[float]]
+        if matrix and isinstance(matrix[0], list):
+            rows = matrix  # type: ignore[assignment]
+        else:
+            flat = [float(value) for value in matrix]  # type: ignore[arg-type]
+            if len(flat) < 12:
+                return None
+            width = 4 if len(flat) >= 16 else 3
+            rows = [
+                flat[offset : offset + width]
+                for offset in range(0, min(len(flat), width * 3), width)
+            ]
+
+        if len(rows) < 3 or any(len(row) < 3 for row in rows[:3]):
+            return None
+
+        forward_x = float(rows[0][2])
+        forward_y = float(rows[1][2])
+        forward_z = float(rows[2][2])
+        norm = (forward_x**2 + forward_y**2 + forward_z**2) ** 0.5
+        if norm <= 1e-8:
+            return None
+        return min(1.0, max(0.0, abs(forward_z) / norm))
+
     @classmethod
     def observations_from_result(cls, result: Any) -> list[VisionObservation]:
         faces = list(getattr(result, "face_landmarks", []) or [])
@@ -261,6 +299,7 @@ class MediaPipeFaceAnalyzer:
                 attributes["blendshapes"] = cls._blendshape_map(
                     list(blendshape_groups[index])
                 )
+            matrix = None
             if index < len(matrices):
                 matrix = cls._matrix_values(matrices[index])
                 if matrix is not None:
@@ -275,6 +314,25 @@ class MediaPipeFaceAnalyzer:
                     attributes=attributes,
                 )
             )
+
+            frontal_score = cls._frontal_score(matrix)
+            if frontal_score is not None:
+                observations.append(
+                    VisionObservation(
+                        kind="head_pose",
+                        confidence=0.5,
+                        label=(
+                            "approximately_frontal"
+                            if frontal_score >= 0.90
+                            else "turned"
+                        ),
+                        attributes={
+                            "face_index": index,
+                            "frontal_score": frontal_score,
+                            "score_kind": "forward_axis_alignment",
+                        },
+                    )
+                )
         return observations
 
     async def analyze(
