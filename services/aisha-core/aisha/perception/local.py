@@ -188,7 +188,7 @@ class MediaPipeFaceAnalyzer:
             min_face_detection_confidence=0.5,
             min_face_presence_confidence=0.5,
             min_tracking_confidence=0.5,
-            output_face_blendshapes=True,
+            output_face_blendshapes=False,
             output_facial_transformation_matrixes=True,
         )
         self._landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(
@@ -218,17 +218,6 @@ class MediaPipeFaceAnalyzer:
         width = max(1e-6, right - left)
         height = max(1e-6, bottom - top)
         return BoundingBox(x=left, y=top, width=width, height=height)
-
-    @staticmethod
-    def _blendshape_map(categories: list[Any]) -> dict[str, float]:
-        output: dict[str, float] = {}
-        for category in categories:
-            name = getattr(category, "category_name", None)
-            score = getattr(category, "score", None)
-            if not name or score is None:
-                continue
-            output[str(name)] = float(score)
-        return output
 
     @staticmethod
     def _matrix_values(matrix: Any) -> list[float] | list[list[float]] | None:
@@ -282,9 +271,6 @@ class MediaPipeFaceAnalyzer:
     @classmethod
     def observations_from_result(cls, result: Any) -> list[VisionObservation]:
         faces = list(getattr(result, "face_landmarks", []) or [])
-        blendshape_groups = list(
-            getattr(result, "face_blendshapes", []) or []
-        )
         matrices = list(
             getattr(result, "facial_transformation_matrixes", []) or []
         )
@@ -295,16 +281,9 @@ class MediaPipeFaceAnalyzer:
                 "face_index": index,
                 "confidence_source": "presence_unscored",
             }
-            if index < len(blendshape_groups):
-                attributes["blendshapes"] = cls._blendshape_map(
-                    list(blendshape_groups[index])
-                )
             matrix = None
             if index < len(matrices):
                 matrix = cls._matrix_values(matrices[index])
-                if matrix is not None:
-                    attributes["facial_transform"] = matrix
-
             observations.append(
                 VisionObservation(
                     kind="face",
