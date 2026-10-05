@@ -452,6 +452,18 @@ class MediaPipeFaceAnalyzer:
             self._last_error = str(exc)
             return None
 
+    def prepare(self) -> dict[str, Any]:
+        """Load configured MediaPipe tasks without opening a camera."""
+        self._ensure_landmarker()
+        if self.object_model_path is not None:
+            detector = self._ensure_object_detector()
+            if detector is None:
+                raise FileNotFoundError(
+                    f"Object detector model not found: {self.object_model_path}"
+                )
+        self._last_error = None
+        return self.status()
+
     def status(self) -> dict[str, Any]:
         return {
             "enabled": self._landmarker is not None,
