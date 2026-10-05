@@ -174,13 +174,16 @@ export default function EmbodimentPreview({
     };
   }, [compact]);
 
+  const boundedVoiceLevel = Math.min(1, Math.max(0, voiceLevel));
   const proceduralStyle = {
     '--gaze-x': gaze.x.toFixed(2) + 'px',
     '--gaze-y': gaze.y.toFixed(2) + 'px',
     '--head-x': head.x.toFixed(2) + 'px',
     '--head-y': head.y.toFixed(2) + 'px',
     '--head-tilt': head.tilt.toFixed(2) + 'deg',
-    '--voice-level': Math.min(1, Math.max(0, voiceLevel)).toFixed(3),
+    '--voice-level': boundedVoiceLevel.toFixed(3),
+    '--voice-mouth-height': (2 + boundedVoiceLevel * 8).toFixed(2) + 'px',
+    '--voice-mouth-width': (24 - boundedVoiceLevel * 7).toFixed(2) + 'px',
   } as CSSProperties;
 
   return (
