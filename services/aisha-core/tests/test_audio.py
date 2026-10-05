@@ -87,6 +87,27 @@ def test_ephemeral_audio_store_expires_and_evicts(monkeypatch):
     assert runtime.get(two.utterance_id) is None
 
 
+def test_ephemeral_audio_store_enforces_total_byte_limit():
+    from aisha.audio.base import SpeechArtifact
+
+    store = EphemeralAudioStore(
+        ttl_seconds=120.0,
+        max_items=8,
+        max_bytes=1024,
+    )
+    oversized = SpeechArtifact(
+        sample_rate=16000,
+        duration_ms=100.0,
+        byte_length=2048,
+    )
+
+    assert store.put(oversized, b"x" * 2048) is False
+    assert store.get(oversized.utterance_id) is None
+    assert store.status()["artifact_count"] == 0
+    assert store.status()["total_bytes"] == 0
+    assert store.status()["max_bytes"] == 1024
+
+
 @pytest.mark.asyncio
 async def test_completed_turn_emits_transient_audio_after_turn_finished(tmp_path):
     settings = Settings(aisha_profile="mock")
