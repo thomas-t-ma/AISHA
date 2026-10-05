@@ -5,10 +5,10 @@ from pathlib import Path
 from aisha.audio.faster_whisper import FasterWhisperSTTProvider
 from aisha.audio.kokoro import KokoroTTSProvider
 from aisha.audio.mock import DisabledTTSProvider
-from aisha.audio.transcription import DisabledSTTProvider
-from aisha.audio.transcription_runtime import TranscriptionRuntime
 from aisha.audio.runtime import SpeechRuntime
 from aisha.audio.store import EphemeralAudioStore
+from aisha.audio.transcription import DisabledSTTProvider
+from aisha.audio.transcription_runtime import TranscriptionRuntime
 from aisha.settings import RuntimeProfile, Settings
 
 
@@ -53,7 +53,6 @@ def build_speech_runtime(
         return SpeechRuntime(provider, store)
 
     return SpeechRuntime(DisabledTTSProvider(), store)
-
 
 
 def build_transcription_runtime(
