@@ -143,10 +143,94 @@ export default function App() {
   const [updatingMemoryMode, setUpdatingMemoryMode] = useState(false);
   const [updatingAffect, setUpdatingAffect] = useState(false);
   const [updatingCamera, setUpdatingCamera] = useState(false);
+  const [voicing, setVoicing] = useState(false);
+  const [voiceLevel, setVoiceLevel] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const creatingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const latestTurnIdRef = useRef('');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const audioAnalyserRef = useRef<AnalyserNode | null>(null);
+  const audioFrameRef = useRef<number | null>(null);
+
+  const stopSpeechPlayback = useCallback((closeContext = false) => {
+    const audio = audioRef.current;
+    audioRef.current = null;
+    if (audio) {
+      audio.onended = null;
+      audio.pause();
+    }
+    if (audioFrameRef.current != null) {
+      window.cancelAnimationFrame(audioFrameRef.current);
+      audioFrameRef.current = null;
+    }
+    audioSourceRef.current?.disconnect();
+    audioSourceRef.current = null;
+    audioAnalyserRef.current?.disconnect();
+    audioAnalyserRef.current = null;
+    setVoicing(false);
+    setVoiceLevel(0);
+
+    if (closeContext && audioContextRef.current) {
+      const context = audioContextRef.current;
+      audioContextRef.current = null;
+      void context.close().catch(() => undefined);
+    }
+  }, []);
+
+  const primeAudioOutput = useCallback(async () => {
+    let context = audioContextRef.current;
+    if (!context || context.state === 'closed') {
+      context = new AudioContext();
+      audioContextRef.current = context;
+    }
+    if (context.state === 'suspended') {
+      await context.resume();
+    }
+    return context;
+  }, []);
+
+  const playSpeech = useCallback(async (url: string) => {
+    stopSpeechPlayback(false);
+    try {
+      const context = await primeAudioOutput();
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      const source = context.createMediaElementSource(audio);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyser.connect(context.destination);
+
+      audioRef.current = audio;
+      audioSourceRef.current = source;
+      audioAnalyserRef.current = analyser;
+
+      const samples = new Uint8Array(analyser.fftSize);
+      const updateVoiceLevel = () => {
+        analyser.getByteTimeDomainData(samples);
+        let power = 0;
+        for (const sample of samples) {
+          const centered = (sample - 128) / 128;
+          power += centered * centered;
+        }
+        const rms = Math.sqrt(power / samples.length);
+        setVoiceLevel(Math.min(1, Math.max(0, (rms - 0.012) * 7.5)));
+        audioFrameRef.current = window.requestAnimationFrame(updateVoiceLevel);
+      };
+
+      audio.onended = () => stopSpeechPlayback(false);
+      await audio.play();
+      setVoicing(true);
+      updateVoiceLevel();
+    } catch {
+      stopSpeechPlayback(false);
+      setNotice('Local speech was generated, but the browser could not play it.');
+    }
+  }, [primeAudioOutput, stopSpeechPlayback]);
 
   const refreshHealth = useCallback(async () => {
     try {
@@ -290,6 +374,7 @@ export default function App() {
           break;
         }
         case 'aisha.turn.started':
+          latestTurnIdRef.current = turnId;
           setActiveTurnId(turnId);
           setBusy(true);
           setMessages((previous) => upsertAssistant(previous, turnId, (message) => message));
@@ -300,6 +385,17 @@ export default function App() {
             text: message.text + (typeof payload.text === 'string' ? payload.text : ''),
           })));
           break;
+        case 'aisha.audio.ready': {
+          const playbackUrl = payload.playback_url;
+          if (
+            typeof playbackUrl === 'string'
+            && turnId
+            && turnId === latestTurnIdRef.current
+          ) {
+            void playSpeech(playbackUrl);
+          }
+          break;
+        }
         case 'aisha.turn.finished':
           setMessages((previous) => upsertAssistant(previous, turnId, (message) => ({
             ...message,
@@ -349,9 +445,14 @@ export default function App() {
     return () => {
       closed = true;
       socket.close();
+      stopSpeechPlayback(false);
       if (wsRef.current === socket) wsRef.current = null;
     };
-  }, [sessionId, refreshInspector]);
+  }, [sessionId, refreshInspector, playSpeech, stopSpeechPlayback]);
+
+  useEffect(() => (
+    () => stopSpeechPlayback(true)
+  ), [stopSpeechPlayback]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -361,6 +462,10 @@ export default function App() {
     const text = draft.trim();
     if (!text || busy || connection !== 'online' || wsRef.current?.readyState !== WebSocket.OPEN) {
       return;
+    }
+    stopSpeechPlayback(false);
+    if (health?.speech?.enabled) {
+      void primeAudioOutput().catch(() => undefined);
     }
     wsRef.current.send(JSON.stringify({ type: 'aisha.user.text', payload: { text } }));
     setMessages((previous) => [
@@ -456,6 +561,8 @@ export default function App() {
       setLatency({ firstTokenMs: null, totalMs: null });
       setDraft('');
       setMemoryMode('normal');
+      latestTurnIdRef.current = '';
+      stopSpeechPlayback(false);
       window.localStorage.setItem(SESSION_KEY, id);
       setSessionId(id);
       setNotice('');
@@ -573,6 +680,9 @@ export default function App() {
             <EmbodimentPreview
               state={embodiment}
               perception={perceptionSummary}
+              voiceLevel={voiceLevel}
+              voicing={voicing}
+              audioOutputEnabled={health?.speech?.enabled ?? false}
               compact
             />
             <button className="inspector-toggle" onClick={() => setMemoryOpen(true)}>Memory ✦</button>
@@ -599,6 +709,9 @@ export default function App() {
               <EmbodimentPreview
                 state={embodiment}
                 perception={perceptionSummary}
+                voiceLevel={voiceLevel}
+                voicing={voicing}
+                audioOutputEnabled={health?.speech?.enabled ?? false}
               />
               <div className="embodiment-debug-grid">
                 <AffectControls
@@ -616,7 +729,10 @@ export default function App() {
               <div className="eyebrow welcome-eyebrow">A PLACE TO BEGIN</div>
               <h2>She's here.</h2>
               <p>Start a conversation and watch the development embodiment react to AISHA's live turn state.</p>
-              <div className="welcome-meta">SEMANTIC STATE · RENDERER-INDEPENDENT · LOCAL</div>
+              <div className="welcome-meta">
+                SEMANTIC STATE · RENDERER-INDEPENDENT · LOCAL
+                {health?.speech?.enabled ? ' · LOCAL VOICE' : ''}
+              </div>
             </div>
           ) : (
             <div className="chat-thread">
