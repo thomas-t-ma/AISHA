@@ -149,13 +149,24 @@ class MediaPipeFaceAnalyzer:
         model_path: Path,
         *,
         num_faces: int = 2,
+        object_model_path: Path | None = None,
+        object_score_threshold: float = 0.45,
+        object_max_results: int = 8,
         mediapipe_module: Any | None = None,
     ) -> None:
         self.frame_store = frame_store
         self.model_path = model_path.expanduser().resolve()
         self.num_faces = max(1, num_faces)
+        self.object_model_path = (
+            None
+            if object_model_path is None
+            else object_model_path.expanduser().resolve()
+        )
+        self.object_score_threshold = min(1.0, max(0.0, object_score_threshold))
+        self.object_max_results = max(1, object_max_results)
         self._mp = mediapipe_module
         self._landmarker: Any | None = None
+        self._object_detector: Any | None = None
         self._last_timestamp_ms = 0
         self._last_error: str | None = None
 
@@ -195,6 +206,28 @@ class MediaPipeFaceAnalyzer:
             options
         )
         return self._landmarker
+
+    def _ensure_object_detector(self) -> Any | None:
+        if self.object_model_path is None:
+            return None
+        if self._object_detector is not None:
+            return self._object_detector
+        if not self.object_model_path.exists():
+            return None
+
+        mp = self._load_mediapipe()
+        options = mp.tasks.vision.ObjectDetectorOptions(
+            base_options=mp.tasks.BaseOptions(
+                model_asset_path=str(self.object_model_path),
+            ),
+            running_mode=mp.tasks.vision.RunningMode.VIDEO,
+            max_results=self.object_max_results,
+            score_threshold=self.object_score_threshold,
+        )
+        self._object_detector = mp.tasks.vision.ObjectDetector.create_from_options(
+            options
+        )
+        return self._object_detector
 
     @staticmethod
     def _bounding_box(landmarks: list[Any]) -> BoundingBox | None:
@@ -314,6 +347,57 @@ class MediaPipeFaceAnalyzer:
                 )
         return observations
 
+    @staticmethod
+    def object_observations_from_result(
+        result: Any,
+        *,
+        width: int | None,
+        height: int | None,
+    ) -> list[VisionObservation]:
+        if not width or not height:
+            return []
+
+        observations: list[VisionObservation] = []
+        for detection_index, detection in enumerate(
+            list(getattr(result, "detections", []) or [])
+        ):
+            categories = list(getattr(detection, "categories", []) or [])
+            if not categories:
+                continue
+            category = categories[0]
+            label = (
+                getattr(category, "category_name", None)
+                or getattr(category, "display_name", None)
+            )
+            score = getattr(category, "score", None)
+            box = getattr(detection, "bounding_box", None)
+            if not label or score is None or box is None:
+                continue
+
+            origin_x = float(getattr(box, "origin_x", 0.0))
+            origin_y = float(getattr(box, "origin_y", 0.0))
+            box_width = float(getattr(box, "width", 0.0))
+            box_height = float(getattr(box, "height", 0.0))
+            if box_width <= 0 or box_height <= 0:
+                continue
+
+            normalized = BoundingBox(
+                x=min(1.0, max(0.0, origin_x / width)),
+                y=min(1.0, max(0.0, origin_y / height)),
+                width=min(1.0, max(1e-6, box_width / width)),
+                height=min(1.0, max(1e-6, box_height / height)),
+            )
+            observations.append(
+                VisionObservation(
+                    kind="object",
+                    confidence=min(1.0, max(0.0, float(score))),
+                    label=str(label).strip().lower(),
+                    bounding_box=normalized,
+                    attributes={"detection_index": detection_index},
+                )
+            )
+        return observations
+
     async def analyze(
         self,
         capture: CameraFrameDescriptor,
@@ -339,6 +423,22 @@ class MediaPipeFaceAnalyzer:
                 timestamp_ms,
             )
             observations = self.observations_from_result(result)
+
+            object_detector = self._ensure_object_detector()
+            if object_detector is not None:
+                object_result = await asyncio.to_thread(
+                    object_detector.detect_for_video,
+                    image,
+                    timestamp_ms,
+                )
+                observations.extend(
+                    self.object_observations_from_result(
+                        object_result,
+                        width=capture.width,
+                        height=capture.height,
+                    )
+                )
+
             self._last_error = None
             return VisionFrame(
                 source_id=capture.source_id,
@@ -359,12 +459,26 @@ class MediaPipeFaceAnalyzer:
             "dependency_available": self._dependency_available(),
             "model_path": str(self.model_path),
             "model_available": self.model_path.exists(),
+            "object_detection_configured": self.object_model_path is not None,
+            "object_model_path": (
+                None if self.object_model_path is None else str(self.object_model_path)
+            ),
+            "object_model_available": (
+                False
+                if self.object_model_path is None
+                else self.object_model_path.exists()
+            ),
+            "object_detector_enabled": self._object_detector is not None,
             "last_error": self._last_error,
         }
 
     def close(self) -> None:
         landmarker = self._landmarker
+        object_detector = self._object_detector
         self._landmarker = None
+        self._object_detector = None
         if landmarker is not None:
             landmarker.close()
+        if object_detector is not None:
+            object_detector.close()
         self.frame_store.clear()
