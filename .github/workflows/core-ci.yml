@@ -51,6 +51,21 @@ jobs:
       - name: Typecheck and build
         run: npm run build
 
+  body:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/aisha-body
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/aisha-body/.node-version
+      - name: Install
+        run: npm install
+      - name: Typecheck and build
+        run: npm run build
+
   windows-scripts:
     runs-on: windows-latest
     steps:

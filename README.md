@@ -168,11 +168,17 @@ Local voice output is also opt-in:
 .\Start-AISHA.ps1 -Voice
 ```
 
-Vision and voice can be combined:
+Vision, voice, listening, and the standalone body renderer can be combined:
 
 ```powershell
-.\Start-AISHA.ps1 -Profile nvidia-5080 -Vision -Voice
+.\Start-AISHA.ps1 -Profile nvidia-5080 -Vision -Voice -Listen -Body
 ```
+
+`-Body` starts the dedicated renderer at `http://127.0.0.1:5174`. It is a
+presentation-only client: it reads semantic embodiment and sanitized perception
+state, but it does not receive conversation history, memory records, model
+settings, or camera controls. Studio remains the development/control surface on
+port `5173`.
 
 On first voice use, the launcher installs the optional Kokoro ONNX stack and
 downloads the versioned full-precision Kokoro v1.0 model plus voice bundle into

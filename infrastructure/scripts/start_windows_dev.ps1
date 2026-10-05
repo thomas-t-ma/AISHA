@@ -4,6 +4,7 @@ param(
     [switch]$Vision,
     [switch]$Voice,
     [switch]$Listen,
+    [switch]$Body,
     [switch]$SkipInstall
 )
 
@@ -12,6 +13,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $Core = Join-Path $RepoRoot "services\aisha-core"
 $Studio = Join-Path $RepoRoot "apps\aisha-studio"
+$BodyApp = Join-Path $RepoRoot "apps\aisha-body"
 $Python = Join-Path $Core ".venv\Scripts\python.exe"
 $NodeVersionFile = Join-Path $Studio ".node-version"
 
@@ -161,6 +163,23 @@ if (-not $SkipInstall -and -not (Test-Path (Join-Path $Studio "node_modules"))) 
     }
 }
 
+if ($Body -and -not (Test-Path (Join-Path $BodyApp "node_modules"))) {
+    if ($SkipInstall) {
+        throw "AISHA Body dependencies are missing. Run without -SkipInstall once."
+    }
+    Write-Host "Installing AISHA Body dependencies..."
+    Push-Location $BodyApp
+    try {
+        & npm.cmd install
+        if ($LASTEXITCODE -ne 0) {
+            throw "AISHA Body npm install failed with exit code $LASTEXITCODE"
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 $VisionEnvironment = if ($Vision) {
     "`$env:AISHA_VISION_PROVIDER = 'local-mediapipe'"
 }
@@ -196,12 +215,23 @@ Set-Location '$Studio'
 & npm.cmd run dev
 "@
 
+$BodyCommand = @"
+Set-Location '$BodyApp'
+& '$Fnm' env --use-on-cd --shell powershell | Out-String | Invoke-Expression
+& '$Fnm' use '$NodeVersion' | Out-Host
+& npm.cmd run dev
+"@
+
 Write-Host ""
 $VisionLabel = if ($Vision) { "local vision enabled" } else { "vision disabled" }
 $VoiceLabel = if ($Voice) { "local voice enabled" } else { "voice disabled" }
 $ListenLabel = if ($Listen) { "local listening enabled" } else { "listening disabled" }
-Write-Host "Starting AISHA Core ($Profile, $VisionLabel, $VoiceLabel, $ListenLabel) and AISHA Studio..."
+$BodyLabel = if ($Body) { "body enabled" } else { "body disabled" }
+Write-Host "Starting AISHA Core ($Profile, $VisionLabel, $VoiceLabel, $ListenLabel, $BodyLabel) and AISHA Studio..."
 Write-Host "Studio: http://127.0.0.1:5173"
+if ($Body) {
+    Write-Host "Body:   http://127.0.0.1:5174"
+}
 Write-Host ""
 
 Start-Process powershell.exe -ArgumentList @(
@@ -217,3 +247,12 @@ Start-Process powershell.exe -ArgumentList @(
     "-ExecutionPolicy", "Bypass",
     "-Command", $FrontendCommand
 )
+
+if ($Body) {
+    Start-Process powershell.exe -ArgumentList @(
+        "-NoExit",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", $BodyCommand
+    )
+}
