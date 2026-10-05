@@ -155,11 +155,12 @@ Local camera perception is opt-in:
 ```
 
 On first use, the launcher installs the optional OpenCV/MediaPipe dependencies
-and downloads the Face Landmarker model into AISHA's local data directory. The
-camera still starts **off** and must be enabled explicitly in Studio. Captured
-frames may exist briefly in a bounded provider-local memory buffer while they
-are analyzed; raw pixels never enter AISHA's semantic perception state, events,
-memory, or SQLite, and captures are not persisted.
+and downloads the versioned Face Landmarker and EfficientDet-Lite0 object
+detector models into AISHA's local data directory. The camera still starts
+**off** and must be enabled explicitly in Studio. Face/head geometry and common
+object detections share the same bounded ephemeral frame before it is discarded.
+Raw pixels never enter AISHA's semantic perception state, events, memory, or
+SQLite, and captures are not persisted.
 
 Local voice output is also opt-in:
 
