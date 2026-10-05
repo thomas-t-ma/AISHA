@@ -189,3 +189,26 @@ AISHA also exposes an observable-only `PerceptionSummary` containing:
 The summary intentionally does not infer facial emotion, identity, demographic
 attributes, health state, or other unobserved internal traits.
 
+
+
+### Current local face geometry
+
+The optional local MediaPipe backend is intentionally geometry-only:
+
+- face bounding boxes provide normalized face centers for renderer attention;
+- facial transformation matrices are reduced immediately to a conservative
+  forward-axis alignment score;
+- scores at or above 0.90 are labeled `approximately_frontal`;
+- this is **not** eye contact, gaze, attention, intent, or emotion;
+- MediaPipe blendshape output is disabled because AISHA does not currently need
+  to classify the user's facial expression.
+
+Studio may use the normalized face center to bias AISHA's eye position toward the
+viewer. The cognition whitelist does not receive those coordinates or the
+frontal score; it receives only coarse observable facts such as "one person is
+visible" or "a visible face is approximately oriented toward the camera."
+
+Structured perception summaries expire after two seconds. The latest developer
+frame may remain inspectable in memory, but stale observations no longer affect
+the renderer or enter a new cognition turn. This prevents old camera state from
+becoming a false current observation.
