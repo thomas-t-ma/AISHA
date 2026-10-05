@@ -49,6 +49,10 @@ class PerceptionSummary(BaseModel):
     person_present: bool = False
     person_count: int = Field(default=0, ge=0)
     gaze_toward_camera: bool = False
+    head_approximately_frontal: bool = False
+    head_frontal_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    primary_person_x: float | None = Field(default=None, ge=0.0, le=1.0)
+    primary_person_y: float | None = Field(default=None, ge=0.0, le=1.0)
     observation_kinds: list[str] = Field(default_factory=list)
     captured_at: datetime | None = None
 
