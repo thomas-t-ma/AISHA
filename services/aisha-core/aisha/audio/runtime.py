@@ -52,7 +52,9 @@ class SpeechRuntime:
             duration_ms=generated.duration_ms,
             byte_length=len(generated.data),
         )
-        self.store.put(artifact, generated.data)
+        if not self.store.put(artifact, generated.data):
+            self._last_error = "Generated speech exceeded the ephemeral audio cache limit"
+            return None
         self._syntheses += 1
         self._last_error = None
         return artifact
