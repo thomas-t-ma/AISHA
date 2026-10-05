@@ -22,6 +22,18 @@ export interface PerceptionSummary {
   captured_at: string | null;
 }
 
+export interface SpeechStatus {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  voice?: string;
+  artifact_count: number;
+  ttl_seconds: number;
+  persisted: boolean;
+  syntheses: number;
+  last_error: string | null;
+}
+
 export interface CameraStatus {
   available: boolean;
   enabled: boolean;
@@ -52,6 +64,7 @@ export interface RuntimeHealth {
     error?: string;
   };
   embodiment?: EmbodimentState;
+  speech?: SpeechStatus;
   perception?: {
     enabled?: boolean;
     provider?: string;
