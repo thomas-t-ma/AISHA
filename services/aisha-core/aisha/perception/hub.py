@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -134,7 +135,11 @@ class PerceptionHub:
             if observation.kind != "object" or not observation.label:
                 continue
             label = observation.label.strip().lower()
-            if not label or label == "person" or label in object_labels:
+            if (
+                not re.fullmatch(r"[a-z0-9][a-z0-9 _-]{0,39}", label)
+                or label == "person"
+                or label in object_labels
+            ):
                 continue
             object_labels.append(label)
             if len(object_labels) >= 6:
