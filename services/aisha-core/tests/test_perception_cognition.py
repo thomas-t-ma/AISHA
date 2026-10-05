@@ -67,7 +67,8 @@ def test_perception_prompt_policy_whitelists_only_observable_summary_facts():
         "0.73",
         "0.44",
         "observation_kinds",
-        "face",
+        "frame_id",
+        "source_id",
     ):
         assert forbidden not in rendered
 
