@@ -15,6 +15,11 @@ class PerceptionPromptPolicy:
                 f"{summary.person_count} {noun} currently visible to the local camera."
             )
 
+        if summary.head_approximately_frontal:
+            facts.append(
+                "At least one visible face is approximately oriented toward the camera."
+            )
+
         if summary.gaze_toward_camera:
             facts.append(
                 "A reliable structured gaze observation is labeled toward_camera."
