@@ -7,6 +7,7 @@ import shutil
 import urllib.request
 from pathlib import Path
 
+from aisha.perception.local import EphemeralFrameStore, MediaPipeFaceAnalyzer
 from aisha.settings import Settings
 
 FACE_LANDMARKER_MODEL_URL = (
@@ -129,6 +130,33 @@ def main() -> int:
         and model_path.exists()
         and object_model_path.exists()
     )
+    if ready:
+        analyzer = MediaPipeFaceAnalyzer(
+            EphemeralFrameStore(max_frames=1),
+            model_path,
+            object_model_path=object_model_path,
+        )
+        try:
+            prepared = analyzer.prepare()
+            print("  Model load: ready")
+            print(
+                "  Face task: "
+                + ("ready" if prepared["enabled"] else "missing")
+            )
+            print(
+                "  Object task: "
+                + (
+                    "ready"
+                    if prepared["object_detector_enabled"]
+                    else "missing"
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - setup must report backend errors
+            print(f"  Model load: failed ({type(exc).__name__}: {exc})")
+            ready = False
+        finally:
+            analyzer.close()
+
     return 0 if ready else 1
 
 
