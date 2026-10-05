@@ -112,6 +112,16 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
     monkeypatch.setenv("AISHA_DATA_DIR", str(tmp_path))
 
     with TestClient(app) as client:
+        speech = client.get("/v1/audio/status")
+        assert speech.status_code == 200
+        assert speech.json()["enabled"] is False
+        assert speech.json()["provider"] == "disabled"
+        assert speech.json()["artifact_count"] == 0
+        assert speech.json()["persisted"] is False
+
+        missing_audio = client.get("/v1/audio/utt_missing")
+        assert missing_audio.status_code == 404
+
         embodiment = client.get("/v1/embodiment/state")
         assert embodiment.status_code == 200
         assert embodiment.json()["activity"] == "idle"
@@ -185,6 +195,8 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
 
         health = client.get("/v1/health")
         assert health.status_code == 200
+        assert health.json()["speech"]["enabled"] is False
+        assert health.json()["speech"]["provider"] == "disabled"
         assert health.json()["embodiment"]["activity"] == "idle"
         assert health.json()["embodiment"]["affect"] == "amused"
         assert health.json()["perception"]["enabled"] is False
