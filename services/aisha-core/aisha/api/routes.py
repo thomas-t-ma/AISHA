@@ -78,6 +78,7 @@ async def health(request: Request):
         "warmup": state.get("warmup_metrics", {}),
         "embodiment": state["orchestrator"].embodiment_status(),
         "speech": state["speech_runtime"].status(),
+        "transcription": state["transcription_runtime"].status(),
         "perception": {
             **state["perception_hub"].status(),
             "camera": state["camera_controller"].status(),
@@ -187,6 +188,57 @@ async def session_model_runs(
     limit: int = Query(default=100, ge=1, le=1000),
 ):
     return await request.app.state.aisha["store"].session_model_runs(session_id, limit=limit)
+
+@router.get("/transcription/status")
+async def transcription_status(request: Request):
+    return request.app.state.aisha["transcription_runtime"].status()
+
+
+@router.post("/audio/transcribe")
+async def transcribe_audio(request: Request):
+    _check_local_origin(request)
+    runtime = request.app.state.aisha["transcription_runtime"]
+    status = runtime.status()
+    if not status.get("enabled", False):
+        raise HTTPException(
+            status_code=503,
+            detail="Local speech-to-text is disabled",
+        )
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_bytes = int(content_length)
+        except ValueError:
+            declared_bytes = 0
+        if declared_bytes > runtime.max_audio_bytes:
+            raise HTTPException(status_code=413, detail="Audio payload is too large")
+
+    payload = await request.body()
+    if len(payload) > runtime.max_audio_bytes:
+        raise HTTPException(status_code=413, detail="Audio payload is too large")
+    if not payload:
+        raise HTTPException(status_code=400, detail="Audio payload is empty")
+
+    content_type = request.headers.get(
+        "content-type",
+        "application/octet-stream",
+    ).split(";", 1)[0].strip().lower()
+    if not content_type.startswith("audio/"):
+        raise HTTPException(
+            status_code=415,
+            detail="Expected an audio content type",
+        )
+
+    result = await runtime.transcribe(
+        payload,
+        content_type=content_type,
+    )
+    if result is None:
+        detail = runtime.status().get("last_error") or "No speech was transcribed"
+        raise HTTPException(status_code=422, detail=str(detail))
+    return result.model_dump(mode="json")
+
 
 @router.get("/audio/status")
 async def audio_status(request: Request):
