@@ -75,6 +75,10 @@ class VisionProfile(BaseModel):
     poll_interval_seconds: float = Field(default=0.5, ge=0.05, le=10.0)
     num_faces: int = Field(default=2, ge=1, le=8)
     model_path: str | None = None
+    object_detection: bool = True
+    object_model_path: str | None = None
+    object_score_threshold: float = Field(default=0.45, ge=0.0, le=1.0)
+    object_max_results: int = Field(default=8, ge=1, le=50)
 
 
 class RuntimeProfile(BaseModel):
@@ -118,6 +122,8 @@ class Settings(BaseSettings):
     aisha_vision_provider: Literal["disabled", "local-mediapipe"] | None = None
     aisha_vision_camera_index: int | None = None
     aisha_vision_model_path: str | None = None
+    aisha_vision_object_detection: bool | None = None
+    aisha_vision_object_model_path: str | None = None
 
     @property
     def data_dir(self) -> Path:
@@ -169,6 +175,10 @@ class Settings(BaseSettings):
             profile.vision.camera_index = self.aisha_vision_camera_index
         if self.aisha_vision_model_path is not None:
             profile.vision.model_path = self.aisha_vision_model_path
+        if self.aisha_vision_object_detection is not None:
+            profile.vision.object_detection = self.aisha_vision_object_detection
+        if self.aisha_vision_object_model_path is not None:
+            profile.vision.object_model_path = self.aisha_vision_object_model_path
         return profile
 
     def resolve_api_key(self, profile: RuntimeProfile) -> str | None:
