@@ -26,9 +26,9 @@ __all__ = [
     "SpeechArtifact",
     "SpeechRuntime",
     "StoredAudio",
+    "TTSProvider",
     "TranscriptionResult",
     "TranscriptionRuntime",
-    "TTSProvider",
     "build_speech_runtime",
     "build_transcription_runtime",
 ]
