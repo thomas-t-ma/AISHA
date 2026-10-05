@@ -259,7 +259,8 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         assert health.json()["speech"]["enabled"] is False
         assert health.json()["speech"]["provider"] == "disabled"
         assert health.json()["embodiment"]["activity"] == "idle"
-        assert health.json()["embodiment"]["affect"] == "amused"
+        assert health.json()["embodiment"]["affect"] == "curious"
+        assert health.json()["embodiment"]["affect_expires_at"] is not None
         assert health.json()["perception"]["enabled"] is False
         assert health.json()["perception"]["camera"]["enabled"] is False
         assert health.json()["perception"]["camera"]["privacy"]["camera_active"] is False
