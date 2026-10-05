@@ -1,7 +1,8 @@
 param(
     [string]$Profile = "mock",
     [switch]$Vision,
-    [switch]$Voice
+    [switch]$Voice,
+    [switch]$Listen
 )
 
 $ErrorActionPreference = "Stop"
@@ -79,6 +80,7 @@ try {
     $extras = @("dev")
     if ($Vision) { $extras += "vision-local" }
     if ($Voice) { $extras += "voice-local" }
+    if ($Listen) { $extras += "stt-local" }
     $coreExtra = ".[" + ($extras -join ",") + "]"
     & $VenvPython -m pip install -e $coreExtra
     if ($LASTEXITCODE -ne 0) {
@@ -96,6 +98,13 @@ try {
         & $VenvPython scripts\setup_local_voice.py --download-models
         if ($LASTEXITCODE -ne 0) {
             throw "AISHA local voice setup failed."
+        }
+    }
+
+    if ($Listen) {
+        & $VenvPython scripts\setup_local_stt.py --model small.en --download-model
+        if ($LASTEXITCODE -ne 0) {
+            throw "AISHA local listening setup failed."
         }
     }
 }
@@ -139,7 +148,9 @@ Write-Host "AISHA Windows development environment is ready."
 Write-Host "Profile: $Profile"
 Write-Host "Vision: $Vision"
 Write-Host "Voice: $Voice"
+Write-Host "Listen: $Listen"
 Write-Host "Start everything from the repository root with:"
 $visionFlag = if ($Vision) { " -Vision" } else { "" }
 $voiceFlag = if ($Voice) { " -Voice" } else { "" }
-Write-Host "  .\Start-AISHA.ps1 -Profile $Profile$visionFlag$voiceFlag"
+$listenFlag = if ($Listen) { " -Listen" } else { "" }
+Write-Host "  .\Start-AISHA.ps1 -Profile $Profile$visionFlag$voiceFlag$listenFlag"
