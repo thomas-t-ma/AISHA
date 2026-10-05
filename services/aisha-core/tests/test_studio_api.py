@@ -172,6 +172,41 @@ def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
         )
         assert rejected_affect.status_code == 403
 
+        pulsed = client.post(
+            "/v1/embodiment/affect",
+            json={
+                "affect": "curious",
+                "intensity": 0.45,
+                "duration_seconds": 4.0,
+            },
+            headers={"origin": "http://127.0.0.1:5173"},
+        )
+        assert pulsed.status_code == 200
+        assert pulsed.json()["affect"] == "curious"
+        assert pulsed.json()["affect_expires_at"] is not None
+
+        too_short = client.post(
+            "/v1/embodiment/affect",
+            json={
+                "affect": "warm",
+                "intensity": 0.5,
+                "duration_seconds": 0.1,
+            },
+            headers={"origin": "http://127.0.0.1:5173"},
+        )
+        assert too_short.status_code == 422
+
+        too_long = client.post(
+            "/v1/embodiment/affect",
+            json={
+                "affect": "warm",
+                "intensity": 0.5,
+                "duration_seconds": 31.0,
+            },
+            headers={"origin": "http://127.0.0.1:5173"},
+        )
+        assert too_long.status_code == 422
+
         perception = client.get("/v1/perception/status")
         assert perception.status_code == 200
         assert perception.json()["enabled"] is False
