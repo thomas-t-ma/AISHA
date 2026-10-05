@@ -19,6 +19,7 @@ export interface PerceptionSummary {
   primary_person_x: number | null;
   primary_person_y: number | null;
   observation_kinds: string[];
+  visible_objects: string[];
   captured_at: string | null;
 }
 
