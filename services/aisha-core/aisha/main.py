@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from aisha.api.routes import router
+from aisha.audio.registry import build_speech_runtime
 from aisha.character.loader import load_persona
 from aisha.cognition.orchestrator import AISHAOrchestrator
 from aisha.memory.evidence import OllamaEvidenceVerifier
@@ -107,10 +108,12 @@ async def lifespan(app: FastAPI):
             query_instruction=profile.memory.semantic_query_instruction,
         )
     perception = build_perception_components(settings, profile)
+    speech = build_speech_runtime(settings, profile)
     orchestrator = AISHAOrchestrator(
         store, persona, provider, ledger=ledger, reflector=reflector,
         evidence_verifier=evidence_verifier, semantic_retriever=semantic_retriever,
         perception_summary_provider=perception.hub.summary,
+        speech_synthesizer=speech.synthesize,
     )
     perception.runtime.start()
 
@@ -121,6 +124,7 @@ async def lifespan(app: FastAPI):
         "store": store,
         "provider": provider,
         "orchestrator": orchestrator,
+        "speech_runtime": speech,
         "perception_hub": perception.hub,
         "camera_controller": perception.camera,
         "perception_runtime": perception.runtime,
@@ -132,6 +136,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await perception.runtime.stop()
+        speech.close()
         await orchestrator.stop_reflections()
 
 
