@@ -9,8 +9,14 @@ from aisha.perception.base import PerceptionSummary, VisionFrame, VisionProvider
 class PerceptionHub:
     """Owns the latest structured perception state, not camera pixels."""
 
-    def __init__(self, provider: VisionProvider) -> None:
+    def __init__(
+        self,
+        provider: VisionProvider,
+        *,
+        max_summary_age_seconds: float = 2.0,
+    ) -> None:
         self.provider = provider
+        self.max_summary_age_seconds = max(0.1, max_summary_age_seconds)
         self._latest: VisionFrame | None = None
         self._frames_seen = 0
 
@@ -34,6 +40,13 @@ class PerceptionHub:
     def summary(self) -> PerceptionSummary:
         latest = self._latest
         if latest is None:
+            return PerceptionSummary()
+
+        age_seconds = max(
+            0.0,
+            (datetime.now(UTC) - latest.captured_at.astimezone(UTC)).total_seconds(),
+        )
+        if age_seconds > self.max_summary_age_seconds:
             return PerceptionSummary()
 
         reliable = [
@@ -115,6 +128,22 @@ class PerceptionHub:
     def status(self) -> dict[str, Any]:
         provider_status = self.provider.status()
         latest = self._latest
+        latest_age_ms = None
+        latest_stale = False
+        if latest is not None:
+            latest_age_ms = round(
+                max(
+                    0.0,
+                    (
+                        datetime.now(UTC)
+                        - latest.captured_at.astimezone(UTC)
+                    ).total_seconds()
+                    * 1000,
+                ),
+                3,
+            )
+            latest_stale = latest_age_ms > self.max_summary_age_seconds * 1000
+
         return {
             **provider_status,
             "frames_seen": self._frames_seen,
@@ -128,5 +157,8 @@ class PerceptionHub:
             "observation_count": (
                 0 if latest is None else len(latest.observations)
             ),
+            "latest_age_ms": latest_age_ms,
+            "latest_stale": latest_stale,
+            "summary_max_age_ms": round(self.max_summary_age_seconds * 1000, 3),
             "checked_at": datetime.now(UTC).isoformat(),
         }
