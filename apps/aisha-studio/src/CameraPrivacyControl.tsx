@@ -43,6 +43,26 @@ export default function CameraPrivacyControl({
           People visible
           <strong>{enabled ? (perception?.person_count ?? 0) : 0}</strong>
         </span>
+        <span>
+          Face center
+          <strong>
+            {enabled
+              && perception?.primary_person_x != null
+              && perception.primary_person_y != null
+              ? perception.primary_person_x.toFixed(2)
+                + ', ' + perception.primary_person_y.toFixed(2)
+              : '—'}
+          </strong>
+        </span>
+        <span>
+          Head geometry
+          <strong>
+            {enabled && perception?.head_frontal_score != null
+              ? (perception.head_approximately_frontal ? 'frontal ' : 'turned ')
+                + Math.round(perception.head_frontal_score * 100) + '%'
+              : '—'}
+          </strong>
+        </span>
       </div>
 
       <button
