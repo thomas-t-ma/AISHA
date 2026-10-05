@@ -22,6 +22,30 @@ export interface PerceptionSummary {
   captured_at: string | null;
 }
 
+export interface TranscriptionStatus {
+  enabled: boolean;
+  provider: string;
+  model: string;
+  device?: string;
+  compute_type?: string;
+  language?: string | null;
+  loaded?: boolean;
+  transcriptions: number;
+  max_audio_bytes: number;
+  audio_persisted: boolean;
+  last_error: string | null;
+}
+
+export interface TranscriptionResult {
+  text: string;
+  language: string | null;
+  language_probability: number | null;
+  duration_ms: number | null;
+  provider: string;
+  model: string;
+  created_at: string;
+}
+
 export interface SpeechStatus {
   enabled: boolean;
   provider: string;
@@ -65,6 +89,7 @@ export interface RuntimeHealth {
   };
   embodiment?: EmbodimentState;
   speech?: SpeechStatus;
+  transcription?: TranscriptionStatus;
   perception?: {
     enabled?: boolean;
     provider?: string;
