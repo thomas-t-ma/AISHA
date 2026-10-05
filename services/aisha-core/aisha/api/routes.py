@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from aisha.embodiment.state import AffectIntent
@@ -260,9 +262,7 @@ async def audio_artifact(utterance_id: str, request: Request):
     )
 
 
-@router.get("/body/state")
-async def body_state(request: Request):
-    state = request.app.state.aisha
+def _body_state_payload(state: dict) -> dict:
     perception = state["perception_hub"].summary()
     return {
         "embodiment": state["orchestrator"].embodiment_status(),
@@ -276,6 +276,42 @@ async def body_state(request: Request):
             "visible_objects": perception.visible_objects,
         },
     }
+
+
+@router.get("/body/state")
+async def body_state(request: Request):
+    return _body_state_payload(request.app.state.aisha)
+
+
+@router.get("/body/stream")
+async def body_stream(request: Request):
+    async def events():
+        previous: str | None = None
+        keepalive_ticks = 0
+        while not await request.is_disconnected():
+            payload = json.dumps(
+                _body_state_payload(request.app.state.aisha),
+                separators=(",", ":"),
+            )
+            if payload != previous:
+                yield f"data: {payload}\n\n"
+                previous = payload
+                keepalive_ticks = 0
+            else:
+                keepalive_ticks += 1
+                if keepalive_ticks >= 150:
+                    yield ": keepalive\n\n"
+                    keepalive_ticks = 0
+            await asyncio.sleep(0.1)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/embodiment/state")

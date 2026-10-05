@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 
-import { getBodyState } from './api';
+import { connectBodyStream, getBodyState } from './api';
 import type { BodyPerception, EmbodimentState } from './types';
 
 const DEFAULT_STATE: EmbodimentState = {
@@ -36,23 +36,30 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
-    const refresh = async () => {
-      try {
-        const bodyState = await getBodyState();
+    void getBodyState()
+      .then((bodyState) => {
         if (cancelled) return;
         setState(bodyState.embodiment);
         setPerception(bodyState.perception);
-        setOnline(true);
-      } catch {
+      })
+      .catch(() => {
         if (!cancelled) setOnline(false);
-      }
-    };
+      });
 
-    void refresh();
-    const timer = window.setInterval(() => void refresh(), 250);
+    const disconnect = connectBodyStream(
+      (bodyState) => {
+        if (cancelled) return;
+        setState(bodyState.embodiment);
+        setPerception(bodyState.perception);
+      },
+      (connected) => {
+        if (!cancelled) setOnline(connected);
+      },
+    );
+
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      disconnect();
     };
   }, []);
 
