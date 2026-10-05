@@ -161,6 +161,25 @@ frames may exist briefly in a bounded provider-local memory buffer while they
 are analyzed; raw pixels never enter AISHA's semantic perception state, events,
 memory, or SQLite, and captures are not persisted.
 
+Local voice output is also opt-in:
+
+```powershell
+.\Start-AISHA.ps1 -Voice
+```
+
+Vision and voice can be combined:
+
+```powershell
+.\Start-AISHA.ps1 -Profile nvidia-5080 -Vision -Voice
+```
+
+On first voice use, the launcher installs the optional Kokoro ONNX stack and
+downloads the versioned full-precision Kokoro v1.0 model plus voice bundle into
+AISHA's local data directory. The setup helper verifies the upstream SHA-256
+digests. Speech WAVs are held only in a bounded TTL-expiring in-memory store and
+are never written to AISHA's SQLite state. Studio plays the transient artifact
+and drives mouth opening from the actual waveform amplitude.
+
 ## Moving between machines
 
 GitHub is the source of truth for AISHA code.
