@@ -19,6 +19,7 @@ class PerceptionHub:
         self.max_summary_age_seconds = max(0.1, max_summary_age_seconds)
         self._latest: VisionFrame | None = None
         self._frames_seen = 0
+        self._primary_center: tuple[float, float] | None = None
 
     def accept(self, frame: VisionFrame) -> VisionFrame:
         self._latest = frame.model_copy(deep=True)
@@ -36,6 +37,7 @@ class PerceptionHub:
 
     def clear(self) -> None:
         self._latest = None
+        self._primary_center = None
 
     def summary(self) -> PerceptionSummary:
         latest = self._latest
@@ -47,6 +49,7 @@ class PerceptionHub:
             (datetime.now(UTC) - latest.captured_at.astimezone(UTC)).total_seconds(),
         )
         if age_seconds > self.max_summary_age_seconds:
+            self._primary_center = None
             return PerceptionSummary()
 
         reliable = [
@@ -80,13 +83,41 @@ class PerceptionHub:
             if observation.bounding_box is not None
         ]
         if boxed_people:
-            primary_person = max(
-                boxed_people,
-                key=lambda observation: (
-                    observation.bounding_box.width
-                    * observation.bounding_box.height
-                ),
-            )
+            if self._primary_center is not None:
+                previous_x, previous_y = self._primary_center
+
+                def center_distance(observation) -> float:
+                    box = observation.bounding_box
+                    assert box is not None
+                    center_x = box.x + box.width / 2.0
+                    center_y = box.y + box.height / 2.0
+                    return (
+                        (center_x - previous_x) ** 2
+                        + (center_y - previous_y) ** 2
+                    ) ** 0.5
+
+                nearest = min(boxed_people, key=center_distance)
+                # Preserve continuity only when the closest face is reasonably
+                # near the prior target. Otherwise reacquire the largest face.
+                primary_person = (
+                    nearest
+                    if center_distance(nearest) <= 0.28
+                    else max(
+                        boxed_people,
+                        key=lambda observation: (
+                            observation.bounding_box.width
+                            * observation.bounding_box.height
+                        ),
+                    )
+                )
+            else:
+                primary_person = max(
+                    boxed_people,
+                    key=lambda observation: (
+                        observation.bounding_box.width
+                        * observation.bounding_box.height
+                    ),
+                )
 
         primary_person_x = None
         primary_person_y = None
@@ -94,6 +125,9 @@ class PerceptionHub:
             box = primary_person.bounding_box
             primary_person_x = min(1.0, max(0.0, box.x + box.width / 2.0))
             primary_person_y = min(1.0, max(0.0, box.y + box.height / 2.0))
+            self._primary_center = (primary_person_x, primary_person_y)
+        elif not people:
+            self._primary_center = None
 
         head_pose = [
             observation
