@@ -7,6 +7,7 @@ import pytest
 
 import aisha.audio.store as audio_store_module
 from aisha.audio.mock import DisabledTTSProvider, MockTTSProvider
+from aisha.audio.registry import build_speech_runtime
 from aisha.audio.runtime import SpeechRuntime
 from aisha.audio.store import EphemeralAudioStore
 from aisha.character.loader import load_persona
@@ -122,3 +123,23 @@ async def test_completed_turn_emits_transient_audio_after_turn_finished(tmp_path
     persisted_types = [event["type"] for event in persisted_events]
     assert "aisha.turn.finished" in persisted_types
     assert "aisha.audio.ready" not in persisted_types
+
+
+
+def test_speech_registry_selects_kokoro_without_loading_models(tmp_path):
+    settings = Settings(
+        aisha_profile="mock",
+        aisha_data_dir=str(tmp_path),
+        aisha_tts_provider="local-kokoro",
+    )
+    profile = settings.load_profile()
+    runtime = build_speech_runtime(settings, profile)
+
+    status = runtime.status()
+    assert status["provider"] == "kokoro-onnx"
+    assert status["model"] == "kokoro-v1.0"
+    assert status["loaded"] is False
+    assert status["model_available"] is False
+    assert status["voices_available"] is False
+    assert status["artifact_count"] == 0
+    assert status["persisted"] is False
