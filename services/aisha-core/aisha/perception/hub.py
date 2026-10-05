@@ -129,6 +129,17 @@ class PerceptionHub:
         elif not people:
             self._primary_center = None
 
+        object_labels: list[str] = []
+        for observation in reliable:
+            if observation.kind != "object" or not observation.label:
+                continue
+            label = observation.label.strip().lower()
+            if not label or label == "person" or label in object_labels:
+                continue
+            object_labels.append(label)
+            if len(object_labels) >= 6:
+                break
+
         head_pose = [
             observation
             for observation in reliable
@@ -156,6 +167,7 @@ class PerceptionHub:
             primary_person_x=primary_person_x,
             primary_person_y=primary_person_y,
             observation_kinds=sorted({observation.kind for observation in reliable}),
+            visible_objects=object_labels,
             captured_at=latest.captured_at,
         )
 
