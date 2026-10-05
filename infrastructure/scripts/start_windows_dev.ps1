@@ -3,6 +3,7 @@ param(
     [string]$Profile = "mock",
     [switch]$Vision,
     [switch]$Voice,
+    [switch]$Listen,
     [switch]$SkipInstall
 )
 
@@ -100,6 +101,38 @@ if ($Voice) {
     }
 }
 
+if ($Listen) {
+    Push-Location $Core
+    try {
+        & $Python -c "import faster_whisper" 2>$null
+        $listenPackagesReady = $LASTEXITCODE -eq 0
+
+        if (-not $listenPackagesReady) {
+            if ($SkipInstall) {
+                throw "Listening packages are missing. Run without -SkipInstall once."
+            }
+            Write-Host "Installing optional AISHA local listening dependencies..."
+            & $Python -m pip install -e ".[stt-local]"
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not install AISHA local listening dependencies."
+            }
+        }
+
+        if ($SkipInstall) {
+            & $Python scripts\setup_local_stt.py --model small.en
+        }
+        else {
+            & $Python scripts\setup_local_stt.py --model small.en --download-model
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "AISHA local listening setup is incomplete."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 $Fnm = Resolve-Fnm
 $NodeVersion = (Get-Content $NodeVersionFile -Raw).Trim()
 
@@ -140,11 +173,18 @@ $VoiceEnvironment = if ($Voice) {
 else {
     ""
 }
+$ListenEnvironment = if ($Listen) {
+    "`$env:AISHA_STT_PROVIDER = 'local-faster-whisper'"
+}
+else {
+    ""
+}
 
 $BackendCommand = @"
 `$env:AISHA_PROFILE = '$Profile'
 $VisionEnvironment
 $VoiceEnvironment
+$ListenEnvironment
 Set-Location '$Core'
 & '$Python' -m uvicorn aisha.main:app --reload --host 127.0.0.1 --port 8000
 "@
@@ -159,7 +199,8 @@ Set-Location '$Studio'
 Write-Host ""
 $VisionLabel = if ($Vision) { "local vision enabled" } else { "vision disabled" }
 $VoiceLabel = if ($Voice) { "local voice enabled" } else { "voice disabled" }
-Write-Host "Starting AISHA Core ($Profile, $VisionLabel, $VoiceLabel) and AISHA Studio..."
+$ListenLabel = if ($Listen) { "local listening enabled" } else { "listening disabled" }
+Write-Host "Starting AISHA Core ($Profile, $VisionLabel, $VoiceLabel, $ListenLabel) and AISHA Studio..."
 Write-Host "Studio: http://127.0.0.1:5173"
 Write-Host ""
 
