@@ -4,6 +4,9 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
+from aisha.audio.mock import MockTTSProvider
+from aisha.audio.runtime import SpeechRuntime
+from aisha.audio.store import EphemeralAudioStore
 from aisha.contracts.turns import Message
 from aisha.main import app
 
@@ -105,6 +108,29 @@ def test_session_memory_mode_defaults_normal_and_can_be_toggled(tmp_path, monkey
         )
         assert rejected_origin.status_code == 403
 
+
+
+
+
+def test_transient_audio_artifact_can_be_served_without_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("AISHA_PROFILE", "mock")
+    monkeypatch.setenv("AISHA_DATA_DIR", str(tmp_path))
+
+    with TestClient(app) as client:
+        runtime = SpeechRuntime(
+            MockTTSProvider(),
+            EphemeralAudioStore(ttl_seconds=120.0),
+        )
+        client.app.state.aisha["speech_runtime"] = runtime
+        artifact = asyncio.run(runtime.synthesize("hello"))
+        assert artifact is not None
+
+        response = client.get(f"/v1/audio/{artifact.utterance_id}")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("audio/wav")
+        assert response.headers["cache-control"] == "no-store"
+        assert response.content.startswith(b"RIFF")
+        assert len(response.content) == artifact.byte_length
 
 
 def test_embodiment_and_perception_status_endpoints(tmp_path, monkeypatch):
