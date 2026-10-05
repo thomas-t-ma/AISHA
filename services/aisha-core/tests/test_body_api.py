@@ -53,6 +53,10 @@ def test_body_state_exposes_only_renderer_safe_contract(tmp_path, monkeypatch):
 
 
 def test_body_stream_route_is_registered():
-    paths = {route.path for route in app.routes}
+    paths = {
+        path
+        for route in app.routes
+        if (path := getattr(route, "path", None)) is not None
+    }
     assert "/v1/body/state" in paths
     assert "/v1/body/stream" in paths
