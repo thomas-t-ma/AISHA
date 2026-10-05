@@ -13,6 +13,10 @@ FACE_LANDMARKER_MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/"
     "face_landmarker/face_landmarker/float16/1/face_landmarker.task"
 )
+OBJECT_DETECTOR_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite"
+)
 
 
 def dependency_status() -> dict[str, bool]:
@@ -30,7 +34,12 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def download_model(path: Path, *, force: bool = False) -> Path:
+def download_model(
+    path: Path,
+    *,
+    url: str,
+    force: bool = False,
+) -> Path:
     path = path.expanduser().resolve()
     if path.exists() and not force:
         return path
@@ -42,7 +51,7 @@ def download_model(path: Path, *, force: bool = False) -> Path:
 
     try:
         with urllib.request.urlopen(
-            FACE_LANDMARKER_MODEL_URL,
+            url,
             timeout=90,
         ) as response, temporary.open("wb") as output:
             shutil.copyfileobj(response, output)
@@ -60,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--download-model",
         action="store_true",
-        help="Download the official versioned MediaPipe Face Landmarker model.",
+        help="Download the official versioned MediaPipe vision models.",
     )
     parser.add_argument(
         "--force",
@@ -84,20 +93,42 @@ def main() -> int:
         if args.model_path is not None
         else (settings.data_dir / "models" / "face_landmarker.task").resolve()
     )
+    object_model_path = (
+        settings.data_dir / "models" / "efficientdet_lite0.tflite"
+    ).resolve()
 
     dependencies = dependency_status()
     if args.download_model:
-        download_model(model_path, force=args.force)
+        download_model(
+            model_path,
+            url=FACE_LANDMARKER_MODEL_URL,
+            force=args.force,
+        )
+        download_model(
+            object_model_path,
+            url=OBJECT_DETECTOR_MODEL_URL,
+            force=args.force,
+        )
 
     print("AISHA local vision")
     print(f"  OpenCV: {'ready' if dependencies['opencv'] else 'missing'}")
     print(f"  MediaPipe: {'ready' if dependencies['mediapipe'] else 'missing'}")
-    print(f"  Model: {'ready' if model_path.exists() else 'missing'}")
-    print(f"  Model path: {model_path}")
+    print(f"  Face model: {'ready' if model_path.exists() else 'missing'}")
+    print(f"  Face model path: {model_path}")
     if model_path.exists():
-        print(f"  Model SHA-256: {sha256(model_path)}")
+        print(f"  Face model SHA-256: {sha256(model_path)}")
+    print(
+        f"  Object model: {'ready' if object_model_path.exists() else 'missing'}"
+    )
+    print(f"  Object model path: {object_model_path}")
+    if object_model_path.exists():
+        print(f"  Object model SHA-256: {sha256(object_model_path)}")
 
-    ready = all(dependencies.values()) and model_path.exists()
+    ready = (
+        all(dependencies.values())
+        and model_path.exists()
+        and object_model_path.exists()
+    )
     return 0 if ready else 1
 
 
