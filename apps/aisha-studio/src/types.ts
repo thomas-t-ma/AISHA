@@ -14,6 +14,10 @@ export interface PerceptionSummary {
   person_present: boolean;
   person_count: number;
   gaze_toward_camera: boolean;
+  head_approximately_frontal: boolean;
+  head_frontal_score: number | null;
+  primary_person_x: number | null;
+  primary_person_y: number | null;
   observation_kinds: string[];
   captured_at: string | null;
 }
