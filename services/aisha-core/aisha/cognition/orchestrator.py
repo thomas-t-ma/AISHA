@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from time import perf_counter
 
+from aisha.audio.base import SpeechArtifact
 from aisha.character.loader import PersonaPackage
 from aisha.contracts.events import AISHAEvent
 from aisha.contracts.turns import Message, TurnContext
@@ -38,6 +39,9 @@ class AISHAOrchestrator:
         embodiment_director: EmbodimentDirector | None = None,
         perception_summary_provider: Callable[[], PerceptionSummary] | None = None,
         perception_policy: PerceptionPromptPolicy | None = None,
+        speech_synthesizer: (
+            Callable[[str], Awaitable[SpeechArtifact | None]] | None
+        ) = None,
     ) -> None:
         self.store = store
         self.persona = persona
@@ -49,6 +53,7 @@ class AISHAOrchestrator:
         self.embodiment_director = embodiment_director or EmbodimentDirector()
         self.perception_summary_provider = perception_summary_provider
         self.perception_policy = perception_policy or PerceptionPromptPolicy()
+        self.speech_synthesizer = speech_synthesizer
         self._reflections: set[asyncio.Task[None]] = set()
         self._last_reflection_error: str | None = None
         self._last_reflection_result: dict | None = None
@@ -668,3 +673,17 @@ class AISHAOrchestrator:
                 payload={"reason": "test_mode", "memory_mode": memory_mode},
             )
         yield finished_event
+
+        if self.speech_synthesizer is not None and final_text:
+            artifact = await self.speech_synthesizer(final_text)
+            if artifact is not None:
+                yield AISHAEvent(
+                    session_id=session_id,
+                    turn_id=context.turn_id,
+                    source="aisha.audio",
+                    type="aisha.audio.ready",
+                    payload={
+                        **artifact.model_dump(mode="json"),
+                        "playback_url": f"/v1/audio/{artifact.utterance_id}",
+                    },
+                )
