@@ -43,6 +43,16 @@ class MemoryProfile(BaseModel):
     )
 
 
+class TTSProfile(BaseModel):
+    provider: Literal["disabled", "local-kokoro"] = "disabled"
+    voice: str = "af_heart"
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    language: str = "en-us"
+    model_path: str | None = None
+    voices_path: str | None = None
+    artifact_ttl_seconds: float = Field(default=120.0, ge=10.0, le=3600.0)
+
+
 class VisionProfile(BaseModel):
     provider: Literal["disabled", "local-mediapipe"] = "disabled"
     camera_index: int = Field(default=0, ge=0)
@@ -58,7 +68,7 @@ class RuntimeProfile(BaseModel):
     llm: LLMProfile
     memory: MemoryProfile = Field(default_factory=MemoryProfile)
     stt: dict[str, Any] = Field(default_factory=dict)
-    tts: dict[str, Any] = Field(default_factory=dict)
+    tts: TTSProfile = Field(default_factory=TTSProfile)
     vision: VisionProfile = Field(default_factory=VisionProfile)
     notes: str | None = None
 
@@ -79,6 +89,11 @@ class Settings(BaseSettings):
     aisha_llm_api_key: str | None = None
     aisha_llm_think: bool | Literal["low", "medium", "high", "max"] | None = None
     aisha_llm_keep_alive: str | int | None = None
+
+    aisha_tts_provider: Literal["disabled", "local-kokoro"] | None = None
+    aisha_tts_voice: str | None = None
+    aisha_tts_model_path: str | None = None
+    aisha_tts_voices_path: str | None = None
 
     aisha_vision_provider: Literal["disabled", "local-mediapipe"] | None = None
     aisha_vision_camera_index: int | None = None
@@ -112,6 +127,14 @@ class Settings(BaseSettings):
             profile.llm.think = self.aisha_llm_think
         if self.aisha_llm_keep_alive is not None:
             profile.llm.keep_alive = self.aisha_llm_keep_alive
+        if self.aisha_tts_provider is not None:
+            profile.tts.provider = self.aisha_tts_provider
+        if self.aisha_tts_voice is not None:
+            profile.tts.voice = self.aisha_tts_voice
+        if self.aisha_tts_model_path is not None:
+            profile.tts.model_path = self.aisha_tts_model_path
+        if self.aisha_tts_voices_path is not None:
+            profile.tts.voices_path = self.aisha_tts_voices_path
         if self.aisha_vision_provider is not None:
             profile.vision.provider = self.aisha_vision_provider
         if self.aisha_vision_camera_index is not None:
