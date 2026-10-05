@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from aisha.audio.faster_whisper import FasterWhisperSTTProvider
 from aisha.audio.kokoro import KokoroTTSProvider
 from aisha.audio.mock import DisabledTTSProvider
+from aisha.audio.transcription import DisabledSTTProvider
+from aisha.audio.transcription_runtime import TranscriptionRuntime
 from aisha.audio.runtime import SpeechRuntime
 from aisha.audio.store import EphemeralAudioStore
 from aisha.settings import RuntimeProfile, Settings
@@ -50,3 +53,29 @@ def build_speech_runtime(
         return SpeechRuntime(provider, store)
 
     return SpeechRuntime(DisabledTTSProvider(), store)
+
+
+
+def build_transcription_runtime(
+    settings: Settings,
+    profile: RuntimeProfile,
+) -> TranscriptionRuntime:
+    if profile.stt.provider == "local-faster-whisper":
+        provider = FasterWhisperSTTProvider(
+            profile.stt.model,
+            download_root=(settings.data_dir / "models" / "stt").resolve(),
+            device=profile.stt.device,
+            compute_type=profile.stt.compute_type,
+            language=profile.stt.language,
+            beam_size=profile.stt.beam_size,
+            vad_filter=profile.stt.vad_filter,
+        )
+        return TranscriptionRuntime(
+            provider,
+            max_audio_bytes=profile.stt.max_audio_bytes,
+        )
+
+    return TranscriptionRuntime(
+        DisabledSTTProvider(),
+        max_audio_bytes=profile.stt.max_audio_bytes,
+    )
