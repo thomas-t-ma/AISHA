@@ -12,6 +12,7 @@ import {
   getSessionSettings,
   setCameraEnabled,
   setEmbodimentAffect,
+  transcribeAudio,
   setSessionMemoryMode,
 } from './api';
 import AffectControls from './AffectControls';
@@ -145,6 +146,8 @@ export default function App() {
   const [updatingCamera, setUpdatingCamera] = useState(false);
   const [voicing, setVoicing] = useState(false);
   const [voiceLevel, setVoiceLevel] = useState(0);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const creatingRef = useRef(false);
@@ -155,6 +158,31 @@ export default function App() {
   const audioSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const audioAnalyserRef = useRef<AnalyserNode | null>(null);
   const audioFrameRef = useRef<number | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const microphoneStreamRef = useRef<MediaStream | null>(null);
+  const microphoneChunksRef = useRef<Blob[]>([]);
+  const microphoneTimerRef = useRef<number | null>(null);
+
+  const discardMicrophoneRecording = useCallback(() => {
+    if (microphoneTimerRef.current != null) {
+      window.clearTimeout(microphoneTimerRef.current);
+      microphoneTimerRef.current = null;
+    }
+
+    const recorder = recorderRef.current;
+    recorderRef.current = null;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.ondataavailable = null;
+      recorder.onstop = null;
+      recorder.stop();
+    }
+
+    const stream = microphoneStreamRef.current;
+    microphoneStreamRef.current = null;
+    stream?.getTracks().forEach((track) => track.stop());
+    microphoneChunksRef.current = [];
+    setRecording(false);
+  }, []);
 
   const stopSpeechPlayback = useCallback((closeContext = false) => {
     const audio = audioRef.current;
@@ -454,27 +482,171 @@ export default function App() {
     () => stopSpeechPlayback(true)
   ), [stopSpeechPlayback]);
 
+  useEffect(() => (
+    () => discardMicrophoneRecording()
+  ), [discardMicrophoneRecording]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
 
-  function sendMessage() {
-    const text = draft.trim();
-    if (!text || busy || connection !== 'online' || wsRef.current?.readyState !== WebSocket.OPEN) {
-      return;
+  function sendTextMessage(text: string): boolean {
+    const clean = text.trim();
+    if (
+      !clean
+      || busy
+      || connection !== 'online'
+      || wsRef.current?.readyState !== WebSocket.OPEN
+    ) {
+      return false;
     }
+
     stopSpeechPlayback(false);
     if (health?.speech?.enabled) {
       void primeAudioOutput().catch(() => undefined);
     }
-    wsRef.current.send(JSON.stringify({ type: 'aisha.user.text', payload: { text } }));
+    wsRef.current.send(JSON.stringify({
+      type: 'aisha.user.text',
+      payload: { text: clean },
+    }));
     setMessages((previous) => [
       ...previous,
-      { id: 'local_' + crypto.randomUUID(), role: 'user', text, status: 'committed' },
+      {
+        id: 'local_' + crypto.randomUUID(),
+        role: 'user',
+        text: clean,
+        status: 'committed',
+      },
     ]);
-    setDraft('');
     setBusy(true);
     setNotice('');
+    return true;
+  }
+
+  function sendMessage() {
+    if (sendTextMessage(draft)) {
+      setDraft('');
+    }
+  }
+
+  async function startListening() {
+    if (
+      recording
+      || transcribing
+      || busy
+      || connection !== 'online'
+      || !health?.transcription?.enabled
+    ) {
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setNotice('This browser does not support local microphone capture.');
+      return;
+    }
+
+    stopSpeechPlayback(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      microphoneStreamRef.current = stream;
+
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/ogg;codecs=opus',
+        'audio/webm',
+      ];
+      const mimeType = candidates.find((candidate) =>
+        MediaRecorder.isTypeSupported(candidate));
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      recorderRef.current = recorder;
+      microphoneChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          microphoneChunksRef.current.push(event.data);
+        }
+      };
+      recorder.onerror = () => {
+        discardMicrophoneRecording();
+        setTranscribing(false);
+        setNotice('Microphone recording failed.');
+      };
+      recorder.onstop = () => {
+        if (microphoneTimerRef.current != null) {
+          window.clearTimeout(microphoneTimerRef.current);
+          microphoneTimerRef.current = null;
+        }
+
+        recorderRef.current = null;
+        const chunks = microphoneChunksRef.current;
+        microphoneChunksRef.current = [];
+        const activeStream = microphoneStreamRef.current;
+        microphoneStreamRef.current = null;
+        activeStream?.getTracks().forEach((track) => track.stop());
+        setRecording(false);
+
+        if (chunks.length === 0) {
+          setNotice('No microphone audio was captured.');
+          return;
+        }
+
+        const blob = new Blob(chunks, {
+          type: recorder.mimeType || chunks[0]?.type || 'audio/webm',
+        });
+        setTranscribing(true);
+        void transcribeAudio(blob)
+          .then((result) => {
+            const spoken = result.text.trim();
+            if (!spoken) {
+              setNotice('No speech was detected.');
+              return;
+            }
+            if (!sendTextMessage(spoken)) {
+              setDraft(spoken);
+              setNotice('Transcription is ready in the composer.');
+            }
+          })
+          .catch((error: unknown) => {
+            setNotice(
+              error instanceof Error
+                ? error.message
+                : 'Local transcription failed.',
+            );
+          })
+          .finally(() => {
+            setTranscribing(false);
+          });
+      };
+
+      recorder.start(250);
+      setRecording(true);
+      setNotice('');
+      microphoneTimerRef.current = window.setTimeout(() => {
+        if (recorder.state !== 'inactive') recorder.stop();
+      }, 30000);
+    } catch (error) {
+      discardMicrophoneRecording();
+      setNotice(
+        error instanceof DOMException && error.name === 'NotAllowedError'
+          ? 'Microphone permission was not granted.'
+          : 'Could not open the microphone.',
+      );
+    }
+  }
+
+  function finishListening() {
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -550,7 +722,7 @@ export default function App() {
   }
 
   async function newSession() {
-    if (creatingSession || busy) return;
+    if (creatingSession || busy || recording || transcribing) return;
     setCreatingSession(true);
     try {
       const id = await createSession();
@@ -572,6 +744,15 @@ export default function App() {
       setCreatingSession(false);
     }
   }
+
+  const renderedEmbodiment: EmbodimentState = recording
+    ? {
+        ...embodiment,
+        activity: 'listening',
+        expression: 'attentive',
+        intensity: 0.55,
+      }
+    : embodiment;
 
   const currentRun = runs.find((run) => run.run_id === selectedRunId) ?? runs.at(-1);
   const currentTurnStarted = currentRun
@@ -678,7 +859,7 @@ export default function App() {
           </div>
           <div className="topbar-actions">
             <EmbodimentPreview
-              state={embodiment}
+              state={renderedEmbodiment}
               perception={perceptionSummary}
               voiceLevel={voiceLevel}
               voicing={voicing}
@@ -707,7 +888,7 @@ export default function App() {
           {messages.length === 0 ? (
             <div className="welcome">
               <EmbodimentPreview
-                state={embodiment}
+                state={renderedEmbodiment}
                 perception={perceptionSummary}
                 voiceLevel={voiceLevel}
                 voicing={voicing}
@@ -715,7 +896,7 @@ export default function App() {
               />
               <div className="embodiment-debug-grid">
                 <AffectControls
-                  state={embodiment}
+                  state={renderedEmbodiment}
                   disabled={connection !== 'online' || updatingAffect}
                   onChange={(affect, intensity) => void changeAffect(affect, intensity)}
                 />
@@ -732,6 +913,7 @@ export default function App() {
               <div className="welcome-meta">
                 SEMANTIC STATE · RENDERER-INDEPENDENT · LOCAL
                 {health?.speech?.enabled ? ' · LOCAL VOICE' : ''}
+                {health?.transcription?.enabled ? ' · PUSH-TO-TALK' : ''}
               </div>
             </div>
           ) : (
@@ -769,22 +951,60 @@ export default function App() {
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={onComposerKeyDown}
               placeholder={connection === 'online' ? 'Say something to AISHA…' : 'Connect AISHA Core to begin…'}
-              disabled={connection !== 'online'} />
+              disabled={connection !== 'online' || recording || transcribing} />
             <div className="composer-footer">
-              <span>Enter to send · Shift+Enter for a new line</span>
-              {busy ? (
-                <button type="button" className="stop-button" onClick={cancelTurn}
-                  disabled={connection !== 'online'}>■ Stop turn</button>
-              ) : (
-                <button type="submit" className="send-button"
-                  disabled={!draft.trim() || connection !== 'online'}>Send <span>↗</span></button>
-              )}
+              <span>
+                {recording
+                  ? 'MICROPHONE ACTIVE · press Send voice when finished'
+                  : transcribing
+                    ? 'Transcribing locally…'
+                    : 'Enter to send · Shift+Enter for a new line'}
+              </span>
+              <div className="composer-actions">
+                {health?.transcription?.enabled && !busy && (
+                  <button
+                    type="button"
+                    className={'listen-button ' + (recording ? 'recording' : '')}
+                    onClick={() => {
+                      if (recording) finishListening();
+                      else void startListening();
+                    }}
+                    disabled={transcribing || connection !== 'online'}
+                  >
+                    {recording
+                      ? '● Send voice'
+                      : transcribing
+                        ? 'Transcribing…'
+                        : '◉ Listen'}
+                  </button>
+                )}
+                {busy ? (
+                  <button type="button" className="stop-button" onClick={cancelTurn}
+                    disabled={connection !== 'online'}>■ Stop turn</button>
+                ) : (
+                  <button type="submit" className="send-button"
+                    disabled={
+                      !draft.trim()
+                      || connection !== 'online'
+                      || recording
+                      || transcribing
+                    }>Send <span>↗</span></button>
+                )}
+              </div>
             </div>
           </form>
-          <div className={'composer-disclaimer ' + (memoryMode === 'test' ? 'test-active' : '')}>
-            {memoryMode === 'test'
-              ? 'TEST CONVERSATION · recall enabled · learned-memory writes disabled'
-              : 'Development build · AISHA has no camera or microphone access yet.'}
+          <div className={'composer-disclaimer '
+            + (memoryMode === 'test' ? 'test-active' : '')
+            + (recording ? ' microphone-active' : '')}>
+            {recording
+              ? 'MICROPHONE ACTIVE · local push-to-talk · recording is not stored'
+              : transcribing
+                ? 'LOCAL TRANSCRIPTION · audio is ephemeral and not persisted'
+                : memoryMode === 'test'
+                  ? 'TEST CONVERSATION · recall enabled · learned-memory writes disabled'
+                  : health?.transcription?.enabled
+                    ? 'Push-to-talk ready · microphone is off until you press Listen · audio is not stored'
+                    : 'Development build · microphone disabled · launch with -Listen to enable push-to-talk'}
           </div>
         </div>
       </main>
