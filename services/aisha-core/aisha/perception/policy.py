@@ -25,6 +25,10 @@ class PerceptionPromptPolicy:
                 "A reliable structured gaze observation is labeled toward_camera."
             )
 
+        if summary.visible_objects:
+            labels = ", ".join(summary.visible_objects[:4])
+            facts.append(f"Visible nearby objects include: {labels}.")
+
         if not facts:
             return None
 
