@@ -44,6 +44,14 @@ export default function CameraPrivacyControl({
           <strong>{enabled ? (perception?.person_count ?? 0) : 0}</strong>
         </span>
         <span>
+          Objects
+          <strong>
+            {enabled && perception?.visible_objects?.length
+              ? perception.visible_objects.slice(0, 3).join(', ')
+              : 'none'}
+          </strong>
+        </span>
+        <span>
           Face center
           <strong>
             {enabled
