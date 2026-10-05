@@ -41,11 +41,19 @@ class PerceptionHub:
             for observation in latest.observations
             if observation.confidence >= 0.5
         ]
-        people = [
+        faces = [
             observation
             for observation in reliable
-            if observation.kind in {"person", "face"}
+            if observation.kind == "face"
         ]
+        detected_people = [
+            observation
+            for observation in reliable
+            if observation.kind == "person"
+        ]
+        # Prefer face detections when present so a future object detector does
+        # not double-count the same visible person as both "person" and "face".
+        people = faces if faces else detected_people
         gaze_toward_camera = any(
             observation.kind == "gaze"
             and observation.label == "toward_camera"
