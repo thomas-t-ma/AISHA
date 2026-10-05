@@ -57,3 +57,31 @@ def test_vision_profile_environment_overrides():
     assert profile.vision.provider == "local-mediapipe"
     assert profile.vision.camera_index == 2
     assert profile.vision.model_path == "models/custom_face_landmarker.task"
+
+
+
+def test_tts_profile_defaults_disabled():
+    profile = Settings(aisha_profile="mock").load_profile()
+
+    assert profile.tts.provider == "disabled"
+    assert profile.tts.voice == "af_heart"
+    assert profile.tts.speed == 1.0
+    assert profile.tts.language == "en-us"
+    assert profile.tts.model_path is None
+    assert profile.tts.voices_path is None
+
+
+def test_tts_profile_environment_overrides():
+    settings = Settings(
+        aisha_profile="mock",
+        aisha_tts_provider="local-kokoro",
+        aisha_tts_voice="af_sarah",
+        aisha_tts_model_path="models/tts/custom.onnx",
+        aisha_tts_voices_path="models/tts/custom.bin",
+    )
+    profile = settings.load_profile()
+
+    assert profile.tts.provider == "local-kokoro"
+    assert profile.tts.voice == "af_sarah"
+    assert profile.tts.model_path == "models/tts/custom.onnx"
+    assert profile.tts.voices_path == "models/tts/custom.bin"
