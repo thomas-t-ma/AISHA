@@ -51,12 +51,55 @@ class PerceptionHub:
             and observation.label == "toward_camera"
             for observation in reliable
         )
+
+        primary_person = None
+        boxed_people = [
+            observation
+            for observation in people
+            if observation.bounding_box is not None
+        ]
+        if boxed_people:
+            primary_person = max(
+                boxed_people,
+                key=lambda observation: (
+                    observation.bounding_box.width
+                    * observation.bounding_box.height
+                ),
+            )
+
+        primary_person_x = None
+        primary_person_y = None
+        if primary_person is not None and primary_person.bounding_box is not None:
+            box = primary_person.bounding_box
+            primary_person_x = min(1.0, max(0.0, box.x + box.width / 2.0))
+            primary_person_y = min(1.0, max(0.0, box.y + box.height / 2.0))
+
+        head_pose = [
+            observation
+            for observation in reliable
+            if observation.kind == "head_pose"
+        ]
+        frontal_scores = [
+            float(observation.attributes["frontal_score"])
+            for observation in head_pose
+            if isinstance(observation.attributes.get("frontal_score"), (int, float))
+        ]
+        head_frontal_score = max(frontal_scores) if frontal_scores else None
+        head_approximately_frontal = any(
+            observation.label == "approximately_frontal"
+            for observation in head_pose
+        )
+
         return PerceptionSummary(
             frame_id=latest.frame_id,
             source_id=latest.source_id,
             person_present=bool(people),
             person_count=len(people),
             gaze_toward_camera=gaze_toward_camera,
+            head_approximately_frontal=head_approximately_frontal,
+            head_frontal_score=head_frontal_score,
+            primary_person_x=primary_person_x,
+            primary_person_y=primary_person_y,
             observation_kinds=sorted({observation.kind for observation in reliable}),
             captured_at=latest.captured_at,
         )
