@@ -475,6 +475,96 @@ def test_head_pose_geometry_distinguishes_turned_face():
 
 
 
+
+
+def test_mediapipe_object_result_translation_normalizes_boxes_and_labels():
+    detection = SimpleNamespace(
+        categories=[
+            SimpleNamespace(
+                category_name="Cell Phone",
+                display_name="Phone",
+                score=0.87,
+            )
+        ],
+        bounding_box=SimpleNamespace(
+            origin_x=160,
+            origin_y=120,
+            width=320,
+            height=240,
+        ),
+    )
+    ignored = SimpleNamespace(
+        categories=[],
+        bounding_box=SimpleNamespace(
+            origin_x=0,
+            origin_y=0,
+            width=10,
+            height=10,
+        ),
+    )
+    result = SimpleNamespace(detections=[detection, ignored])
+
+    observations = MediaPipeFaceAnalyzer.object_observations_from_result(
+        result,
+        width=640,
+        height=480,
+    )
+
+    assert len(observations) == 1
+    item = observations[0]
+    assert item.kind == "object"
+    assert item.label == "cell phone"
+    assert item.confidence == pytest.approx(0.87)
+    assert item.bounding_box is not None
+    assert item.bounding_box.x == pytest.approx(0.25)
+    assert item.bounding_box.y == pytest.approx(0.25)
+    assert item.bounding_box.width == pytest.approx(0.50)
+    assert item.bounding_box.height == pytest.approx(0.50)
+    assert item.attributes == {"detection_index": 0}
+
+
+def test_perception_summary_deduplicates_and_caps_visible_objects():
+    labels = [
+        "cup",
+        "cup",
+        "laptop",
+        "book",
+        "keyboard",
+        "mouse",
+        "bottle",
+        "chair",
+        "person",
+    ]
+    observations = [
+        VisionObservation(
+            kind="object",
+            confidence=0.9,
+            label=label,
+        )
+        for label in labels
+    ]
+    hub = PerceptionHub(DisabledVisionProvider())
+    hub.accept(
+        VisionFrame(
+            source_id="camera_front",
+            observations=observations,
+        )
+    )
+
+    summary = hub.summary()
+
+    assert summary.visible_objects == [
+        "cup",
+        "laptop",
+        "book",
+        "keyboard",
+        "mouse",
+        "bottle",
+    ]
+    assert "person" not in summary.visible_objects
+    assert summary.observation_kinds == ["object"]
+
+
 def test_perception_registry_selects_local_backend_without_opening_camera(tmp_path):
     settings = Settings(
         aisha_profile="mock",
@@ -493,6 +583,12 @@ def test_perception_registry_selects_local_backend_without_opening_camera(tmp_pa
     assert analyzer_status["analyzer"] == "mediapipe-face-landmarker"
     assert analyzer_status["enabled"] is False
     assert analyzer_status["model_path"].endswith("models/face_landmarker.task")
+    assert analyzer_status["object_detection_configured"] is True
+    assert analyzer_status["object_model_path"].endswith(
+        "models/efficientdet_lite0.tflite"
+    )
+    assert analyzer_status["object_model_available"] is False
+    assert analyzer_status["object_detector_enabled"] is False
     assert components.hub.latest() is None
 
 
