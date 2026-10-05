@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -176,6 +177,40 @@ def test_camera_descriptor_excludes_raw_pixels():
     assert "pixels" not in fields
     assert "frame_ref" in fields
 
+
+
+def test_perception_summary_expires_stale_scene_state():
+    frame = VisionFrame(
+        source_id="camera_front",
+        captured_at=datetime.now(UTC) - timedelta(seconds=10),
+        observations=[
+            VisionObservation(
+                kind="face",
+                confidence=0.5,
+                label="face",
+                bounding_box=BoundingBox(
+                    x=0.20,
+                    y=0.20,
+                    width=0.40,
+                    height=0.50,
+                ),
+            )
+        ],
+    )
+    hub = PerceptionHub(
+        MockVisionProvider(),
+        max_summary_age_seconds=2.0,
+    )
+    hub.accept(frame)
+
+    assert hub.latest() is not None
+    assert hub.status()["latest_stale"] is True
+    assert hub.status()["latest_age_ms"] >= 9000
+    summary = hub.summary()
+    assert summary.person_present is False
+    assert summary.person_count == 0
+    assert summary.primary_person_x is None
+    assert summary.primary_person_y is None
 
 
 @pytest.mark.asyncio
