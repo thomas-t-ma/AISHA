@@ -24,7 +24,7 @@ class PerceptionComponents:
     runtime: PerceptionRuntime
 
 
-def _model_path(settings: Settings, profile: RuntimeProfile) -> Path:
+def _face_model_path(settings: Settings, profile: RuntimeProfile) -> Path:
     configured = profile.vision.model_path
     if configured:
         path = Path(configured).expanduser()
@@ -32,6 +32,18 @@ def _model_path(settings: Settings, profile: RuntimeProfile) -> Path:
             path = settings.data_dir / path
         return path.resolve()
     return (settings.data_dir / "models" / "face_landmarker.task").resolve()
+
+
+def _object_model_path(settings: Settings, profile: RuntimeProfile) -> Path | None:
+    if not profile.vision.object_detection:
+        return None
+    configured = profile.vision.object_model_path
+    if configured:
+        path = Path(configured).expanduser()
+        if not path.is_absolute():
+            path = settings.data_dir / path
+        return path.resolve()
+    return (settings.data_dir / "models" / "efficientdet_lite0.tflite").resolve()
 
 
 def build_perception_components(
@@ -50,8 +62,11 @@ def build_perception_components(
         camera = CameraController(source, on_disable=hub.clear)
         analyzer = MediaPipeFaceAnalyzer(
             frame_store,
-            _model_path(settings, profile),
+            _face_model_path(settings, profile),
             num_faces=profile.vision.num_faces,
+            object_model_path=_object_model_path(settings, profile),
+            object_score_threshold=profile.vision.object_score_threshold,
+            object_max_results=profile.vision.object_max_results,
         )
         runtime = PerceptionRuntime(
             camera,
