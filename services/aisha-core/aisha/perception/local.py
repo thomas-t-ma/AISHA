@@ -381,11 +381,21 @@ class MediaPipeFaceAnalyzer:
             if box_width <= 0 or box_height <= 0:
                 continue
 
+            normalized_x = min(1.0, max(0.0, origin_x / width))
+            normalized_y = min(1.0, max(0.0, origin_y / height))
+            normalized_width = min(
+                max(1e-6, 1.0 - normalized_x),
+                max(1e-6, box_width / width),
+            )
+            normalized_height = min(
+                max(1e-6, 1.0 - normalized_y),
+                max(1e-6, box_height / height),
+            )
             normalized = BoundingBox(
-                x=min(1.0, max(0.0, origin_x / width)),
-                y=min(1.0, max(0.0, origin_y / height)),
-                width=min(1.0, max(1e-6, box_width / width)),
-                height=min(1.0, max(1e-6, box_height / height)),
+                x=normalized_x,
+                y=normalized_y,
+                width=normalized_width,
+                height=normalized_height,
             )
             observations.append(
                 VisionObservation(
