@@ -1,6 +1,7 @@
 param(
     [string]$Profile = "mock",
-    [switch]$Vision
+    [switch]$Vision,
+    [switch]$Voice
 )
 
 $ErrorActionPreference = "Stop"
@@ -75,7 +76,10 @@ Write-Host "Installing AISHA Core dependencies..."
 Push-Location $Core
 try {
     & $VenvPython -m pip install --upgrade pip
-    $coreExtra = if ($Vision) { ".[dev,vision-local]" } else { ".[dev]" }
+    $extras = @("dev")
+    if ($Vision) { $extras += "vision-local" }
+    if ($Voice) { $extras += "voice-local" }
+    $coreExtra = ".[" + ($extras -join ",") + "]"
     & $VenvPython -m pip install -e $coreExtra
     if ($LASTEXITCODE -ne 0) {
         throw "AISHA Core dependency installation failed."
@@ -85,6 +89,13 @@ try {
         & $VenvPython scripts\setup_local_vision.py --download-model
         if ($LASTEXITCODE -ne 0) {
             throw "AISHA local vision setup failed."
+        }
+    }
+
+    if ($Voice) {
+        & $VenvPython scripts\setup_local_voice.py --download-models
+        if ($LASTEXITCODE -ne 0) {
+            throw "AISHA local voice setup failed."
         }
     }
 }
@@ -127,6 +138,8 @@ Write-Host ""
 Write-Host "AISHA Windows development environment is ready."
 Write-Host "Profile: $Profile"
 Write-Host "Vision: $Vision"
+Write-Host "Voice: $Voice"
 Write-Host "Start everything from the repository root with:"
 $visionFlag = if ($Vision) { " -Vision" } else { "" }
-Write-Host "  .\Start-AISHA.ps1 -Profile $Profile$visionFlag"
+$voiceFlag = if ($Voice) { " -Voice" } else { "" }
+Write-Host "  .\Start-AISHA.ps1 -Profile $Profile$visionFlag$voiceFlag"
