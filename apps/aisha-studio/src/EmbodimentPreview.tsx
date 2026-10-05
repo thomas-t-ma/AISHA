@@ -33,8 +33,20 @@ function randomBetween(min: number, max: number): number {
 function gazeBias(
   activity: EmbodimentState['activity'],
   attentionTarget: 'viewer' | 'ambient',
+  viewerPosition: { x: number; y: number } | null,
+  compact: boolean,
 ): Point {
-  if (attentionTarget === 'viewer') return { x: 0, y: 0 };
+  if (attentionTarget === 'viewer') {
+    if (!viewerPosition) return { x: 0, y: 0 };
+    const horizontalRange = compact ? 1.8 : 3.2;
+    const verticalRange = compact ? 1.25 : 2.2;
+    return {
+      // Webcam image-space X is mirrored into screen-space so the avatar
+      // visually looks toward the viewer's physical side of the display.
+      x: (0.5 - viewerPosition.x) * horizontalRange * 2,
+      y: (viewerPosition.y - 0.5) * verticalRange * 2,
+    };
+  }
   if (activity === 'thinking') return { x: 1.4, y: -1.7 };
   if (activity === 'listening') return { x: 0, y: -0.3 };
   if (activity === 'speaking') return { x: 0.4, y: 0 };
@@ -91,7 +103,12 @@ export default function EmbodimentPreview({
 
     let gazeTimer: number | undefined;
     let cancelled = false;
-    const bias = gazeBias(renderer.activity, renderer.attentionTarget);
+    const bias = gazeBias(
+      renderer.activity,
+      renderer.attentionTarget,
+      renderer.viewerPosition,
+      compact,
+    );
     const amplitude = renderer.attentionTarget === 'viewer'
       ? (compact ? 0.35 : 0.55)
       : (compact ? 1.25 : 2.15);
@@ -113,7 +130,13 @@ export default function EmbodimentPreview({
       cancelled = true;
       if (gazeTimer !== undefined) window.clearTimeout(gazeTimer);
     };
-  }, [compact, renderer.activity, renderer.attentionTarget]);
+  }, [
+    compact,
+    renderer.activity,
+    renderer.attentionTarget,
+    renderer.viewerPosition?.x,
+    renderer.viewerPosition?.y,
+  ]);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -171,6 +194,10 @@ export default function EmbodimentPreview({
         + ' ' + renderer.affectIntensity.toFixed(2)
         + ' · activity intensity ' + renderer.activityIntensity.toFixed(2)
         + ' · attention ' + renderer.attentionTarget
+        + (renderer.viewerPosition
+          ? ' @ ' + renderer.viewerPosition.x.toFixed(2)
+            + ',' + renderer.viewerPosition.y.toFixed(2)
+          : '')
       }
     >
       <div className="embodiment-stage" aria-hidden="true">
