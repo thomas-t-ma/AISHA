@@ -41,6 +41,9 @@ class SpeechRuntime:
             self._last_error = str(exc)
             return None
         if generated is None:
+            provider_error = self.provider.status().get("last_error")
+            if isinstance(provider_error, str) and provider_error:
+                self._last_error = provider_error
             return None
 
         artifact = SpeechArtifact(
@@ -58,11 +61,13 @@ class SpeechRuntime:
         return self.store.get(utterance_id)
 
     def status(self) -> dict[str, Any]:
+        provider_status = self.provider.status()
+        provider_error = provider_status.get("last_error")
         return {
-            **self.provider.status(),
+            **provider_status,
             **self.store.status(),
             "syntheses": self._syntheses,
-            "last_error": self._last_error,
+            "last_error": self._last_error or provider_error,
             "checked_at": datetime.now(UTC).isoformat(),
         }
 
