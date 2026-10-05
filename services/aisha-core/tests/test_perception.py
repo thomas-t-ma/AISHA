@@ -494,3 +494,138 @@ def test_perception_registry_selects_local_backend_without_opening_camera(tmp_pa
     assert analyzer_status["enabled"] is False
     assert analyzer_status["model_path"].endswith("models/face_landmarker.task")
     assert components.hub.latest() is None
+
+
+
+def test_primary_person_tracking_prefers_spatial_continuity_over_size_flip():
+    hub = PerceptionHub(DisabledVisionProvider())
+
+    first = VisionFrame(
+        source_id="camera_front",
+        observations=[
+            VisionObservation(
+                kind="face",
+                confidence=0.8,
+                label="face",
+                bounding_box=BoundingBox(
+                    x=0.10,
+                    y=0.20,
+                    width=0.34,
+                    height=0.50,
+                ),
+            ),
+            VisionObservation(
+                kind="face",
+                confidence=0.8,
+                label="face",
+                bounding_box=BoundingBox(
+                    x=0.62,
+                    y=0.22,
+                    width=0.24,
+                    height=0.38,
+                ),
+            ),
+        ],
+    )
+    hub.accept(first)
+    initial = hub.summary()
+    assert initial.primary_person_x == pytest.approx(0.27)
+    assert initial.primary_person_y == pytest.approx(0.45)
+
+    second = VisionFrame(
+        source_id="camera_front",
+        observations=[
+            VisionObservation(
+                kind="face",
+                confidence=0.8,
+                label="face",
+                bounding_box=BoundingBox(
+                    x=0.12,
+                    y=0.21,
+                    width=0.30,
+                    height=0.46,
+                ),
+            ),
+            VisionObservation(
+                kind="face",
+                confidence=0.8,
+                label="face",
+                bounding_box=BoundingBox(
+                    x=0.56,
+                    y=0.16,
+                    width=0.38,
+                    height=0.56,
+                ),
+            ),
+        ],
+    )
+    hub.accept(second)
+    tracked = hub.summary()
+
+    # The right-hand face is now larger, but the left-hand face is still
+    # spatially continuous with the previous target.
+    assert tracked.primary_person_x == pytest.approx(0.27)
+    assert tracked.primary_person_y == pytest.approx(0.44)
+
+
+def test_primary_person_tracking_reacquires_when_previous_target_is_lost():
+    hub = PerceptionHub(DisabledVisionProvider())
+
+    hub.accept(
+        VisionFrame(
+            source_id="camera_front",
+            observations=[
+                VisionObservation(
+                    kind="face",
+                    confidence=0.8,
+                    label="face",
+                    bounding_box=BoundingBox(
+                        x=0.08,
+                        y=0.18,
+                        width=0.32,
+                        height=0.48,
+                    ),
+                )
+            ],
+        )
+    )
+    assert hub.summary().primary_person_x == pytest.approx(0.24)
+
+    hub.accept(
+        VisionFrame(
+            source_id="camera_front",
+            observations=[
+                VisionObservation(
+                    kind="face",
+                    confidence=0.8,
+                    label="face",
+                    bounding_box=BoundingBox(
+                        x=0.66,
+                        y=0.18,
+                        width=0.28,
+                        height=0.44,
+                    ),
+                ),
+                VisionObservation(
+                    kind="face",
+                    confidence=0.8,
+                    label="face",
+                    bounding_box=BoundingBox(
+                        x=0.46,
+                        y=0.08,
+                        width=0.48,
+                        height=0.68,
+                    ),
+                ),
+            ],
+        )
+    )
+    reacquired = hub.summary()
+
+    # No candidate is close enough to the old left-side target, so reacquire
+    # the largest currently visible face.
+    assert reacquired.primary_person_x == pytest.approx(0.70)
+    assert reacquired.primary_person_y == pytest.approx(0.42)
+
+    hub.clear()
+    assert hub._primary_center is None
