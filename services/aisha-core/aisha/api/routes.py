@@ -77,6 +77,7 @@ async def health(request: Request):
         "data_dir": str(state["settings"].data_dir),
         "warmup": state.get("warmup_metrics", {}),
         "embodiment": state["orchestrator"].embodiment_status(),
+        "speech": state["speech_runtime"].status(),
         "perception": {
             **state["perception_hub"].status(),
             "camera": state["camera_controller"].status(),
@@ -186,6 +187,26 @@ async def session_model_runs(
     limit: int = Query(default=100, ge=1, le=1000),
 ):
     return await request.app.state.aisha["store"].session_model_runs(session_id, limit=limit)
+
+@router.get("/audio/status")
+async def audio_status(request: Request):
+    return request.app.state.aisha["speech_runtime"].status()
+
+
+@router.get("/audio/{utterance_id}")
+async def audio_artifact(utterance_id: str, request: Request):
+    stored = request.app.state.aisha["speech_runtime"].get(utterance_id)
+    if stored is None:
+        raise HTTPException(status_code=404, detail="Audio artifact not found or expired")
+    return Response(
+        content=stored.data,
+        media_type=stored.artifact.content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
 
 @router.get("/embodiment/state")
 async def embodiment_state(request: Request):
