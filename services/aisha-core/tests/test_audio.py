@@ -62,10 +62,6 @@ def test_ephemeral_audio_store_expires_and_evicts(monkeypatch):
         EphemeralAudioStore(ttl_seconds=2.0, max_items=1),
     )
 
-    async def synthesize(text: str):
-        return await runtime.synthesize(text)
-
-    first = pytest.run(asyncio=False) if False else None
     # Exercise the store directly so the test clock remains deterministic.
     from aisha.audio.base import SpeechArtifact
 
