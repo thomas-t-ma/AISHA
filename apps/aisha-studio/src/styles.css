@@ -443,7 +443,7 @@ button:disabled { cursor: not-allowed; opacity: .44; }
 .activity-thinking .brow-left { transform: rotate(-5deg) translateY(-1px); }
 .activity-thinking .brow-right { transform: rotate(5deg) translateY(-1px); }
 
-/* Speaking: mouth motion is procedural and deliberately not lip-sync yet. */
+/* Text-only speaking fallback. Real TTS overrides this with waveform-driven motion. */
 .activity-speaking .embodiment-head { border-color: #9277b8; }
 .activity-speaking .embodiment-eye i { width: 7px; height: 7px; }
 .activity-speaking .embodiment-mouth span {
@@ -665,4 +665,35 @@ button:disabled { cursor: not-allowed; opacity: .44; }
   .embodiment-debug-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* Real local speech: the waveform, not the LLM, drives mouth opening. */
+.speech-output-enabled.activity-speaking:not(.is-voicing) .embodiment-mouth span {
+  width: 24px;
+  height: 2px;
+  border: 0;
+  border-radius: 10px;
+  background: #c5afd8aa;
+  animation: none;
+}
+.is-voicing .embodiment-head {
+  border-color: #9277b8;
+}
+.is-voicing .embodiment-mouth span,
+.is-voicing.activity-speaking .embodiment-mouth span,
+.is-voicing.affect-warm .embodiment-mouth span,
+.is-voicing.affect-amused .embodiment-mouth span,
+.is-voicing.affect-concerned .embodiment-mouth span,
+.is-voicing.affect-surprised .embodiment-mouth span {
+  width: var(--voice-mouth-width, 24px);
+  height: var(--voice-mouth-height, 2px);
+  border: 0;
+  border-radius: 50%;
+  background: #cdb9dc88;
+  animation: none;
+  transition: width .045s linear, height .045s linear;
+}
+.is-voicing .embodiment-halo {
+  box-shadow: 0 0 88px #a876ea48, inset 0 0 42px #cbb1ff17;
 }
