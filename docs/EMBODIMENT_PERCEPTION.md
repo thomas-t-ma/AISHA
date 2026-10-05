@@ -174,15 +174,21 @@ structured perception state.
 
 The default development runtime uses `DisabledCameraSource` and
 `DisabledVisionAnalyzer`, so no physical camera is opened. The optional local
-backend uses OpenCV capture and MediaPipe Face Landmarker. Raw frames are kept
-only in a small bounded `EphemeralFrameStore`, removed when consumed, and
-cleared when the camera is disabled. CI exercises the lifecycle with mocks and
-hardware-free fake OpenCV/MediaPipe results.
+backend uses OpenCV capture plus MediaPipe Face Landmarker and, by default,
+EfficientDet-Lite0 object detection. One ephemeral frame is converted once and
+shared by both analyses before it is discarded. Raw frames are kept only in a
+small bounded `EphemeralFrameStore`, removed when consumed, and cleared when
+the camera is disabled. Object labels are normalized, deduplicated, capped, and
+strictly sanitized before they may enter the cognition summary. CI exercises
+the lifecycle with mocks and hardware-free fake OpenCV/MediaPipe results.
 
 AISHA also exposes an observable-only `PerceptionSummary` containing:
 
 - person presence and count;
+- primary visible-person position for renderer gaze;
+- conservative head-frontal geometry;
 - whether a reliable gaze observation is labeled `toward_camera`;
+- up to six sanitized visible object labels;
 - observed object kinds;
 - source/frame metadata.
 
@@ -212,3 +218,18 @@ Structured perception summaries expire after two seconds. The latest developer
 frame may remain inspectable in memory, but stale observations no longer affect
 the renderer or enter a new cognition turn. This prevents old camera state from
 becoming a false current observation.
+
+
+### Object awareness
+
+The first environmental-awareness backend uses the official MediaPipe
+EfficientDet-Lite0 model. It runs locally against the same transient frame used
+for face/head analysis. The detector produces only structured `object`
+observations (label, confidence, normalized bounding box). The raw image is
+never placed in a prompt, event, memory record, or SQLite.
+
+`PerceptionPromptPolicy` may surface at most four visible object labels to the
+conversation model as explicitly transient system-generated context. Labels are
+restricted to a short alphanumeric/space/hyphen vocabulary before prompt
+construction, and the transient context is never copied into the memory episode
+used by the learned-memory reflector.
