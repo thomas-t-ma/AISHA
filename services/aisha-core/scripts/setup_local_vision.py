@@ -19,6 +19,13 @@ OBJECT_DETECTOR_MODEL_URL = (
     "object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite"
 )
 
+FACE_LANDMARKER_SHA256 = (
+    "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff"
+)
+OBJECT_DETECTOR_SHA256 = (
+    "0720bf247bd76e6594ea28fa9c6f7c5242be774818997dbbeffc4da460c723bb"
+)
+
 
 def dependency_status() -> dict[str, bool]:
     return {
@@ -35,14 +42,25 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def verify_sha256(path: Path, expected_sha256: str) -> None:
+    actual = sha256(path)
+    if actual.lower() != expected_sha256.lower():
+        raise ValueError(
+            f"SHA-256 mismatch for {path.name}: expected "
+            f"{expected_sha256}, got {actual}"
+        )
+
+
 def download_model(
     path: Path,
     *,
     url: str,
+    expected_sha256: str,
     force: bool = False,
 ) -> Path:
     path = path.expanduser().resolve()
     if path.exists() and not force:
+        verify_sha256(path, expected_sha256)
         return path
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,6 +74,7 @@ def download_model(
             timeout=90,
         ) as response, temporary.open("wb") as output:
             shutil.copyfileobj(response, output)
+        verify_sha256(temporary, expected_sha256)
         temporary.replace(path)
     finally:
         if temporary.exists():
@@ -103,11 +122,13 @@ def main() -> int:
         download_model(
             model_path,
             url=FACE_LANDMARKER_MODEL_URL,
+            expected_sha256=FACE_LANDMARKER_SHA256,
             force=args.force,
         )
         download_model(
             object_model_path,
             url=OBJECT_DETECTOR_MODEL_URL,
+            expected_sha256=OBJECT_DETECTOR_SHA256,
             force=args.force,
         )
 
@@ -117,18 +138,26 @@ def main() -> int:
     print(f"  Face model: {'ready' if model_path.exists() else 'missing'}")
     print(f"  Face model path: {model_path}")
     if model_path.exists():
-        print(f"  Face model SHA-256: {sha256(model_path)}")
+        face_hash = sha256(model_path)
+        print(f"  Face model SHA-256: {face_hash}")
+        if face_hash.lower() != FACE_LANDMARKER_SHA256.lower():
+            print("  Face model integrity: FAILED")
     print(
         f"  Object model: {'ready' if object_model_path.exists() else 'missing'}"
     )
     print(f"  Object model path: {object_model_path}")
     if object_model_path.exists():
-        print(f"  Object model SHA-256: {sha256(object_model_path)}")
+        object_hash = sha256(object_model_path)
+        print(f"  Object model SHA-256: {object_hash}")
+        if object_hash.lower() != OBJECT_DETECTOR_SHA256.lower():
+            print("  Object model integrity: FAILED")
 
     ready = (
         all(dependencies.values())
         and model_path.exists()
         and object_model_path.exists()
+        and sha256(model_path).lower() == FACE_LANDMARKER_SHA256.lower()
+        and sha256(object_model_path).lower() == OBJECT_DETECTOR_SHA256.lower()
     )
     if ready:
         analyzer = MediaPipeFaceAnalyzer(
