@@ -348,28 +348,30 @@ def test_ephemeral_frame_store_evicts_oldest_frame():
     assert store.pop("three") is third
 
 
-def test_mediapipe_result_translation_stays_observable_only():
+def test_mediapipe_result_translation_stays_geometry_only():
     landmarks = [
         SimpleNamespace(x=0.20, y=0.10),
         SimpleNamespace(x=0.60, y=0.80),
     ]
-    blendshapes = [
-        SimpleNamespace(category_name="eyeBlinkLeft", score=0.25),
-        SimpleNamespace(category_name="jawOpen", score=0.40),
-    ]
 
     class _Matrix:
         def tolist(self):
-            return [[1.0, 0.0], [0.0, 1.0]]
+            return [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ]
 
     result = SimpleNamespace(
         face_landmarks=[landmarks],
-        face_blendshapes=[blendshapes],
+        face_blendshapes=[],
         facial_transformation_matrixes=[_Matrix()],
     )
 
     observations = MediaPipeFaceAnalyzer.observations_from_result(result)
-    assert len(observations) == 1
+    assert [item.kind for item in observations] == ["face", "head_pose"]
+
     face = observations[0]
     assert face.kind == "face"
     assert face.label == "face"
@@ -379,15 +381,17 @@ def test_mediapipe_result_translation_stays_observable_only():
     assert face.bounding_box.width == pytest.approx(0.40)
     assert face.bounding_box.height == pytest.approx(0.70)
     assert face.confidence == 0.5
-    assert face.attributes["confidence_source"] == "presence_unscored"
-    assert face.attributes["blendshapes"] == {
-        "eyeBlinkLeft": 0.25,
-        "jawOpen": 0.40,
+    assert face.attributes == {
+        "face_index": 0,
+        "confidence_source": "presence_unscored",
     }
-    assert face.attributes["facial_transform"] == [
-        [1.0, 0.0],
-        [0.0, 1.0],
-    ]
+
+    head_pose = observations[1]
+    assert head_pose.kind == "head_pose"
+    assert head_pose.label == "approximately_frontal"
+    assert head_pose.confidence == 0.5
+    assert head_pose.attributes["frontal_score"] == pytest.approx(1.0)
+    assert head_pose.attributes["score_kind"] == "forward_axis_alignment"
 
     hub = PerceptionHub(DisabledVisionProvider())
     hub.accept(
@@ -396,8 +400,43 @@ def test_mediapipe_result_translation_stays_observable_only():
             observations=observations,
         )
     )
-    assert hub.summary().person_present is True
-    assert hub.summary().person_count == 1
+    summary = hub.summary()
+    assert summary.person_present is True
+    assert summary.person_count == 1
+    assert summary.primary_person_x == pytest.approx(0.40)
+    assert summary.primary_person_y == pytest.approx(0.45)
+    assert summary.head_approximately_frontal is True
+    assert summary.head_frontal_score == pytest.approx(1.0)
+    assert summary.observation_kinds == ["face", "head_pose"]
+
+
+def test_head_pose_geometry_distinguishes_turned_face():
+    # Third rotation-matrix column has 60 degrees of yaw from camera Z.
+    matrix = [
+        [0.5, 0.0, 0.8660254, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [-0.8660254, 0.0, 0.5, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+
+    score = MediaPipeFaceAnalyzer._frontal_score(matrix)
+
+    assert score == pytest.approx(0.5, abs=1e-6)
+
+    result = SimpleNamespace(
+        face_landmarks=[[
+            SimpleNamespace(x=0.30, y=0.20),
+            SimpleNamespace(x=0.70, y=0.75),
+        ]],
+        face_blendshapes=[],
+        facial_transformation_matrixes=[
+            SimpleNamespace(tolist=lambda: matrix),
+        ],
+    )
+    observations = MediaPipeFaceAnalyzer.observations_from_result(result)
+    head_pose = next(item for item in observations if item.kind == "head_pose")
+    assert head_pose.label == "turned"
+    assert head_pose.attributes["frontal_score"] == pytest.approx(0.5, abs=1e-6)
 
 
 
