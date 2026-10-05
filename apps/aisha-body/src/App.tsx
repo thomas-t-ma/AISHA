@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 
-import { getEmbodiment, getHealth, getPerception } from './api';
-import type { EmbodimentState, PerceptionSummary, RuntimeHealth } from './types';
+import { getBodyState } from './api';
+import type { BodyPerception, EmbodimentState } from './types';
 
 const DEFAULT_STATE: EmbodimentState = {
   sequence: 0,
@@ -13,12 +14,11 @@ const DEFAULT_STATE: EmbodimentState = {
   updated_at: '',
 };
 
-const EMPTY_PERCEPTION: PerceptionSummary = {
+const EMPTY_PERCEPTION: BodyPerception = {
   person_present: false,
   person_count: 0,
   gaze_toward_camera: false,
   head_approximately_frontal: false,
-  head_frontal_score: null,
   primary_person_x: null,
   primary_person_y: null,
   visible_objects: [],
@@ -31,24 +31,21 @@ function clamp(value: number, min: number, max: number): number {
 export default function App() {
   const [state, setState] = useState(DEFAULT_STATE);
   const [perception, setPerception] = useState(EMPTY_PERCEPTION);
-  const [health, setHealth] = useState<RuntimeHealth | null>(null);
   const [online, setOnline] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     const refresh = async () => {
-      const results = await Promise.allSettled([
-        getEmbodiment(),
-        getPerception(),
-        getHealth(),
-      ]);
-      if (cancelled) return;
-
-      if (results[0].status === 'fulfilled') setState(results[0].value);
-      if (results[1].status === 'fulfilled') setPerception(results[1].value);
-      if (results[2].status === 'fulfilled') setHealth(results[2].value);
-      setOnline(results.every((result) => result.status === 'fulfilled'));
+      try {
+        const bodyState = await getBodyState();
+        if (cancelled) return;
+        setState(bodyState.embodiment);
+        setPerception(bodyState.perception);
+        setOnline(true);
+      } catch {
+        if (!cancelled) setOnline(false);
+      }
     };
 
     void refresh();
@@ -82,7 +79,7 @@ export default function App() {
     '--gaze-y': gaze.y.toFixed(2) + 'px',
     '--activity': state.intensity.toFixed(3),
     '--affect': state.affect_intensity.toFixed(3),
-  } as React.CSSProperties;
+  } as CSSProperties;
 
   return (
     <main
@@ -121,7 +118,7 @@ export default function App() {
         </div>
         <small>
           {online
-            ? (health?.profile ?? 'local') + (perception.person_present ? ' · viewer present' : '')
+            ? 'local renderer' + (perception.person_present ? ' · viewer present' : '')
             : 'Core unavailable'}
         </small>
       </div>

@@ -260,6 +260,24 @@ async def audio_artifact(utterance_id: str, request: Request):
     )
 
 
+@router.get("/body/state")
+async def body_state(request: Request):
+    state = request.app.state.aisha
+    perception = state["perception_hub"].summary()
+    return {
+        "embodiment": state["orchestrator"].embodiment_status(),
+        "perception": {
+            "person_present": perception.person_present,
+            "person_count": perception.person_count,
+            "gaze_toward_camera": perception.gaze_toward_camera,
+            "head_approximately_frontal": perception.head_approximately_frontal,
+            "primary_person_x": perception.primary_person_x,
+            "primary_person_y": perception.primary_person_y,
+            "visible_objects": perception.visible_objects,
+        },
+    }
+
+
 @router.get("/embodiment/state")
 async def embodiment_state(request: Request):
     return request.app.state.aisha["orchestrator"].embodiment_status()
