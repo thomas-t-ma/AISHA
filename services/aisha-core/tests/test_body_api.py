@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+from aisha.api.routes import router
 from aisha.main import app
 
 
@@ -53,10 +54,6 @@ def test_body_state_exposes_only_renderer_safe_contract(tmp_path, monkeypatch):
 
 
 def test_body_stream_route_is_registered():
-    paths = {
-        path
-        for route in app.routes
-        if (path := getattr(route, "path", None)) is not None
-    }
+    paths = {route.path for route in router.routes}
     assert "/v1/body/state" in paths
     assert "/v1/body/stream" in paths
