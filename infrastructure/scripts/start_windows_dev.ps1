@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("mock", "mac-m2max-96gb", "nvidia-2070", "nvidia-5080", "nvidia-high")]
+    [ValidateSet("mock", "mac-m2max-96gb", "nvidia-2070", "nvidia-5080", "nvidia-5090", "nvidia-high")]
     [string]$Profile = "mock",
     [switch]$Vision,
     [switch]$Voice,
