@@ -35,6 +35,47 @@ function Resolve-Fnm {
     throw "fnm.exe was not found. Install it once with: winget install Schniz.fnm"
 }
 
+function Test-PythonImports {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Modules
+    )
+
+    $importStatement = "import " + ($Modules -join ", ")
+    $previousPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell can promote native stderr into a terminating
+        # NativeCommandError when ErrorActionPreference is Stop. Dependency
+        # probes must inspect the process exit code instead of aborting startup.
+        $ErrorActionPreference = "SilentlyContinue"
+        & $Python -c $importStatement *> $null
+        return ($LASTEXITCODE -eq 0)
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+
+function Wait-AishaCore {
+    param(
+        [int]$TimeoutSeconds = 60
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        try {
+            Invoke-RestMethod -Uri "http://127.0.0.1:8000/v1/health" -TimeoutSec 2 -ErrorAction Stop | Out-Null
+            return
+        }
+        catch {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+    while ((Get-Date) -lt $deadline)
+
+    throw "AISHA Core did not become ready on http://127.0.0.1:8000 within $TimeoutSeconds seconds. Inspect the AISHA Core PowerShell window for the backend traceback."
+}
+
 if (-not (Test-Path $Python)) {
     throw "AISHA Python environment is missing at $Python. Run infrastructure\scripts\bootstrap_windows.ps1 once."
 }
@@ -42,8 +83,7 @@ if (-not (Test-Path $Python)) {
 if ($Vision) {
     Push-Location $Core
     try {
-        & $Python -c "import cv2, mediapipe" 2>$null
-        $visionPackagesReady = $LASTEXITCODE -eq 0
+        $visionPackagesReady = Test-PythonImports -Modules @("cv2", "mediapipe")
 
         if (-not $visionPackagesReady) {
             if ($SkipInstall) {
@@ -74,8 +114,7 @@ if ($Vision) {
 if ($Voice) {
     Push-Location $Core
     try {
-        & $Python -c "import kokoro_onnx, soundfile" 2>$null
-        $voicePackagesReady = $LASTEXITCODE -eq 0
+        $voicePackagesReady = Test-PythonImports -Modules @("kokoro_onnx", "soundfile")
 
         if (-not $voicePackagesReady) {
             if ($SkipInstall) {
@@ -106,8 +145,7 @@ if ($Voice) {
 if ($Listen) {
     Push-Location $Core
     try {
-        & $Python -c "import faster_whisper" 2>$null
-        $listenPackagesReady = $LASTEXITCODE -eq 0
+        $listenPackagesReady = Test-PythonImports -Modules @("faster_whisper")
 
         if (-not $listenPackagesReady) {
             if ($SkipInstall) {
@@ -239,14 +277,18 @@ Start-Process powershell.exe -ArgumentList @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
     "-Command", $BackendCommand
-)
+) | Out-Null
+
+Write-Host "Waiting for AISHA Core readiness..."
+Wait-AishaCore -TimeoutSeconds 60
+Write-Host "AISHA Core: ready"
 
 Start-Process powershell.exe -ArgumentList @(
     "-NoExit",
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
     "-Command", $FrontendCommand
-)
+) | Out-Null
 
 if ($Body) {
     Start-Process powershell.exe -ArgumentList @(
@@ -254,5 +296,5 @@ if ($Body) {
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command", $BodyCommand
-    )
+    ) | Out-Null
 }
