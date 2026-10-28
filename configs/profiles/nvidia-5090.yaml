@@ -1,0 +1,45 @@
+name: nvidia-5090
+compute:
+  class: nvidia-32gb-high-performance
+  gpu: NVIDIA GeForce RTX 5090
+  vram_gb: 32
+llm:
+  provider: ollama
+  model: qwen3.5:35b
+  base_url: http://127.0.0.1:11434
+  api_key_env: null
+  think: false
+  preload: true
+  keep_alive: 30m
+  options:
+    num_ctx: 32768
+memory:
+  semantic_recall: true
+  embedding_model: qwen3-embedding:4b
+  embedding_base_url: http://127.0.0.1:11434
+  embedding_keep_alive: 30m
+  semantic_threshold: 0.72
+  semantic_candidate_floor: 0.30
+  semantic_limit: 2
+  semantic_relevance_gate: true
+  semantic_query_instruction: >-
+    Given a user's current message, retrieve a previously stated personal memory
+    that is directly relevant and useful for responding. Prefer the same
+    situation or underlying concern even when phrased differently; avoid merely
+    topical or generic associations.
+stt:
+  provider: disabled
+  planned_provider: faster-whisper
+tts:
+  provider: disabled
+  planned_provider: kokoro-local
+vision:
+  provider: disabled
+notes: >-
+  AISHA development profile for the PowerSpec AI90 Windows workstation with an
+  NVIDIA GeForce RTX 5090 (32 GB VRAM). Memory settings intentionally match the
+  frozen v10.2 validation configuration used on the M2 Max. The conversation
+  model remains qwen3.5:35b initially so workstation migration does not also
+  change model behavior; larger-model experiments can be benchmarked separately.
+  Ollama remains external to Git; model weights and machine-local state are not
+  committed.

@@ -62,14 +62,17 @@ if (-not (Test-Path $VenvPython)) {
     }
 
     if (-not $created -and (Get-Command python -ErrorAction SilentlyContinue)) {
-        & python -m venv (Join-Path $Core ".venv")
-        if ($LASTEXITCODE -eq 0) {
-            $created = $true
+        $pythonVersion = (& python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')").Trim()
+        if ($pythonVersion -in @("3.13", "3.12")) {
+            & python -m venv (Join-Path $Core ".venv")
+            if ($LASTEXITCODE -eq 0) {
+                $created = $true
+            }
         }
     }
 
     if (-not $created) {
-        throw "Could not create the Python environment. Install Python 3.13 or 3.12."
+        throw "Could not create the Python environment. Install Python 3.13 or 3.12; AISHA Core does not support Python 3.14."
     }
 }
 
